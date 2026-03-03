@@ -1,0 +1,326 @@
+---
+title: "Customer Seats"
+description: "Manage seat assignments for team subscriptions"
+---
+
+Customer Seats allow you to assign and manage individual seats within team subscriptions. Each seat can be claimed by a team member to access the benefits.
+
+## Base URL
+
+```
+https://api.polar.sh/v1/customer-seats
+```
+
+## Authentication
+
+Customer seat endpoints require authentication with an Organization Access Token or Personal Access Token.
+
+## Assign Seat
+
+Assign a seat to a customer email address. This creates an invitation that the recipient can claim.
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/customer-seats" \
+  -H "Authorization: Bearer polar_oat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_id": "cust_...",
+    "subscription_id": "sub_...",
+    "email": "member@team.com"
+  }'
+```
+
+```python Python
+from polar_sdk import Polar
+
+client = Polar(access_token="polar_oat_...")
+seat = client.customer_seats.assign(
+    customer_id="cust_...",
+    subscription_id="sub_...",
+    email="member@team.com"
+)
+```
+
+```typescript TypeScript
+import { Polar } from '@polar-sh/sdk';
+
+const polar = new Polar({
+  accessToken: 'polar_oat_...'
+});
+
+const seat = await polar.customerSeats.assign({
+  customerId: 'cust_...',
+  subscriptionId: 'sub_...',
+  email: 'member@team.com'
+});
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="customer_id" type="string" required>
+  ID of the customer (team owner)
+</ParamField>
+
+<ParamField body="subscription_id" type="string" required>
+  ID of the seat-based subscription
+</ParamField>
+
+<ParamField body="email" type="string" required>
+  Email address to assign the seat to
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  Unique seat assignment ID
+</ResponseField>
+
+<ResponseField name="customer_id" type="string">
+  Customer who owns the subscription
+</ResponseField>
+
+<ResponseField name="subscription_id" type="string">
+  Associated subscription ID
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  Email address of the assigned seat
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Seat status: `pending`, `claimed`, `revoked`
+</ResponseField>
+
+<ResponseField name="invitation_token" type="string">
+  Token for claiming the seat (only for pending seats)
+</ResponseField>
+
+<ResponseField name="claimed_at" type="string | null">
+  Timestamp when the seat was claimed
+</ResponseField>
+
+<ResponseField name="claimed_by_customer_id" type="string | null">
+  Customer ID who claimed the seat
+</ResponseField>
+
+## List Customer Seats
+
+List all seat assignments for a subscription.
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/customer-seats?subscription_id=sub_..." \
+  -H "Authorization: Bearer polar_oat_..."
+```
+
+### Query Parameters
+
+<ParamField query="subscription_id" type="string" required>
+  Filter by subscription ID
+</ParamField>
+
+<ParamField query="customer_id" type="string">
+  Filter by customer ID
+</ParamField>
+
+<ParamField query="status" type="string">
+  Filter by status: `pending`, `claimed`, `revoked`
+</ParamField>
+
+<ParamField query="page" type="integer" default={1}>
+  Page number
+</ParamField>
+
+<ParamField query="limit" type="integer" default={10}>
+  Results per page
+</ParamField>
+
+### Response
+
+Returns a paginated list of seat assignments with their status.
+
+## Revoke Seat
+
+Revoke a seat assignment. This removes access for the seat holder.
+
+```bash cURL
+curl -X DELETE "https://api.polar.sh/v1/customer-seats/{id}" \
+  -H "Authorization: Bearer polar_oat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The seat assignment ID to revoke
+</ParamField>
+
+### Response
+
+Returns the revoked seat object with status `revoked`.
+
+<Warning>
+Revoking a seat immediately removes the benefit grants for that seat holder.
+</Warning>
+
+## Resend Invitation
+
+Resend the invitation email for a pending seat.
+
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/customer-seats/{id}/resend" \
+  -H "Authorization: Bearer polar_oat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The seat assignment ID
+</ParamField>
+
+### Response
+
+Returns `200 OK` if the invitation was resent successfully.
+
+## Get Claim Information
+
+Get information about a seat invitation using the invitation token (public endpoint).
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/customer-seats/claim/{token}"
+```
+
+### Path Parameters
+
+<ParamField path="token" type="string" required>
+  The invitation token
+</ParamField>
+
+### Response
+
+Returns seat information without requiring authentication.
+
+## Claim Seat
+
+Claim a seat using the invitation token (requires customer authentication).
+
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/customer-seats/claim/{token}" \
+  -H "Authorization: Bearer customer_session_..."
+```
+
+### Path Parameters
+
+<ParamField path="token" type="string" required>
+  The invitation token from the email
+</ParamField>
+
+### Response
+
+Returns the claimed seat with status `claimed` and grants the associated benefits.
+
+## Seat Lifecycle
+
+```
+┌─────────────┐
+│   pending   │  Created when seat is assigned
+└──────┬──────┘
+       │
+       │ User clicks invitation link
+       ▼
+┌─────────────┐
+│   claimed   │  User gains access to benefits
+└──────┬──────┘
+       │
+       │ Admin revokes seat
+       ▼
+┌─────────────┐
+│   revoked   │  Benefits removed
+└─────────────┘
+```
+
+## Webhooks
+
+Subscribe to seat events:
+
+- `customer_seat.assigned` - Seat assigned to email
+- `customer_seat.claimed` - Seat claimed by user
+- `customer_seat.revoked` - Seat access revoked
+
+```typescript
+// Webhook payload example
+{
+  "type": "customer_seat.claimed",
+  "data": {
+    "id": "seat_...",
+    "customer_id": "cust_...",
+    "subscription_id": "sub_...",
+    "email": "member@team.com",
+    "status": "claimed",
+    "claimed_at": "2024-03-15T10:30:00Z",
+    "claimed_by_customer_id": "cust_member_..."
+  }
+}
+```
+
+## Use Cases
+
+### Team Onboarding
+
+```typescript
+// Assign seats to all team members
+const teamEmails = [
+  'alice@team.com',
+  'bob@team.com',
+  'charlie@team.com'
+];
+
+for (const email of teamEmails) {
+  await polar.customerSeats.assign({
+    customerId: teamCustomerId,
+    subscriptionId: subscriptionId,
+    email: email
+  });
+}
+```
+
+### Self-Service Management
+
+Allow team admins to manage their own seats:
+
+```typescript
+// List current seats
+const seats = await polar.customerSeats.list({
+  subscriptionId: subscriptionId
+});
+
+// Revoke a seat
+await polar.customerSeats.revoke(seatId);
+
+// Add a new seat (if available)
+await polar.customerSeats.assign({
+  customerId: customerId,
+  subscriptionId: subscriptionId,
+  email: 'newmember@team.com'
+});
+```
+
+### Seat Usage Monitoring
+
+```typescript
+const seats = await polar.customerSeats.list({
+  subscriptionId: subscriptionId
+});
+
+const total = seats.pagination.total_count;
+const claimed = seats.items.filter(s => s.status === 'claimed').length;
+const pending = seats.items.filter(s => s.status === 'pending').length;
+
+console.log(`Seats: ${claimed}/${total} claimed, ${pending} pending`);
+```
+
+## Related
+
+- [Seat-Based Pricing Guide](/features/seat-based-pricing) - Feature overview
+- [Seat-Based Pricing Guide](/guides/seat-based-pricing) - Implementation guide
+- [Subscriptions](/api-reference/subscriptions) - Subscription API

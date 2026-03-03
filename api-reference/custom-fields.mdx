@@ -1,0 +1,358 @@
+---
+title: "Custom Fields"
+description: "Manage custom checkout fields to collect additional customer information"
+---
+
+Custom Fields allow you to collect additional information from customers during checkout. You can create text, number, select, date, checkbox, and textarea fields.
+
+## Base URL
+
+```
+https://api.polar.sh/v1/custom-fields
+```
+
+## Authentication
+
+All custom field endpoints require authentication with an Organization Access Token or Personal Access Token with appropriate scopes.
+
+## List Custom Fields
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/custom-fields" \
+  -H "Authorization: Bearer polar_oat_..."
+```
+
+```python Python
+from polar_sdk import Polar
+
+client = Polar(access_token="polar_oat_...")
+fields = client.custom_fields.list()
+```
+
+```typescript TypeScript
+import { Polar } from '@polar-sh/sdk';
+
+const polar = new Polar({
+  accessToken: 'polar_oat_...'
+});
+
+const fields = await polar.customFields.list();
+```
+</CodeGroup>
+
+### Query Parameters
+
+<ParamField query="organization_id" type="string">
+  Filter by organization ID
+</ParamField>
+
+<ParamField query="page" type="integer" default={1}>
+  Page number
+</ParamField>
+
+<ParamField query="limit" type="integer" default={10}>
+  Results per page (max 100)
+</ParamField>
+
+### Response
+
+Returns an array of custom field objects with their configuration.
+
+## Get Custom Field
+
+Retrieve a specific custom field by ID.
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/custom-fields/{id}" \
+  -H "Authorization: Bearer polar_oat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The custom field ID
+</ParamField>
+
+## Create Custom Field
+
+Create a new custom field for checkout forms.
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/custom-fields" \
+  -H "Authorization: Bearer polar_oat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "text",
+    "slug": "company_name",
+    "name": "Company Name",
+    "required": true,
+    "properties": {
+      "min_length": 2,
+      "max_length": 100
+    }
+  }'
+```
+
+```python Python
+field = client.custom_fields.create(
+    type="text",
+    slug="company_name",
+    name="Company Name",
+    required=True,
+    properties={
+        "min_length": 2,
+        "max_length": 100
+    }
+)
+```
+
+```typescript TypeScript
+const field = await polar.customFields.create({
+  type: 'text',
+  slug: 'company_name',
+  name: 'Company Name',
+  required: true,
+  properties: {
+    minLength: 2,
+    maxLength: 100
+  }
+});
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="type" type="string" required>
+  Field type: `text`, `number`, `select`, `date`, `checkbox`, `textarea`
+</ParamField>
+
+<ParamField body="slug" type="string" required>
+  Unique identifier for the field (immutable, alphanumeric with underscores)
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Display name shown to customers
+</ParamField>
+
+<ParamField body="required" type="boolean" default={false}>
+  Whether the field is required
+</ParamField>
+
+<ParamField body="properties" type="object">
+  Type-specific properties:
+  - **text/textarea**: `min_length`, `max_length`
+  - **number**: `min`, `max`, `integer_only`
+  - **select**: `options` (array of {value, label})
+  - **date**: `min_date`, `max_date`
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Custom metadata for the field
+</ParamField>
+
+### Field Type Properties
+
+<AccordionGroup>
+  <Accordion title="Text Field">
+    ```json
+    {
+      "type": "text",
+      "properties": {
+        "min_length": 1,
+        "max_length": 255
+      }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Number Field">
+    ```json
+    {
+      "type": "number",
+      "properties": {
+        "min": 0,
+        "max": 1000,
+        "integer_only": true
+      }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Select Field">
+    ```json
+    {
+      "type": "select",
+      "properties": {
+        "options": [
+          {"value": "small", "label": "Small (1-10)"},
+          {"value": "medium", "label": "Medium (11-50)"},
+          {"value": "large", "label": "Large (50+)"}
+        ]
+      }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Date Field">
+    ```json
+    {
+      "type": "date",
+      "properties": {
+        "min_date": "2024-01-01",
+        "max_date": "2024-12-31"
+      }
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Checkbox Field">
+    ```json
+    {
+      "type": "checkbox",
+      "name": "Accept Terms"
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Textarea Field">
+    ```json
+    {
+      "type": "textarea",
+      "properties": {
+        "min_length": 10,
+        "max_length": 1000
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Update Custom Field
+
+Update an existing custom field.
+
+```bash cURL
+curl -X PATCH "https://api.polar.sh/v1/custom-fields/{id}" \
+  -H "Authorization: Bearer polar_oat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated Company Name",
+    "required": false
+  }'
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The custom field ID
+</ParamField>
+
+### Request Body
+
+<ParamField body="name" type="string">
+  Updated display name
+</ParamField>
+
+<ParamField body="required" type="boolean">
+  Updated required status
+</ParamField>
+
+<ParamField body="properties" type="object">
+  Updated type-specific properties
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Updated metadata
+</ParamField>
+
+<Note>
+The `slug` and `type` fields cannot be changed after creation.
+</Note>
+
+## Delete Custom Field
+
+Delete a custom field. This will remove it from all checkout forms.
+
+```bash cURL
+curl -X DELETE "https://api.polar.sh/v1/custom-fields/{id}" \
+  -H "Authorization: Bearer polar_oat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The custom field ID to delete
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on success.
+
+## Accessing Field Data
+
+Custom field responses are stored in the order's `custom_field_data` as JSONB:
+
+```typescript
+const order = await polar.orders.get(orderId);
+console.log(order.custom_field_data);
+// {
+//   "company_name": "Acme Corp",
+//   "team_size": "medium",
+//   "start_date": "2024-06-01"
+// }
+```
+
+## Use Cases
+
+### Lead Qualification
+
+```typescript
+await polar.customFields.create({
+  type: 'select',
+  slug: 'company_size',
+  name: 'Company Size',
+  required: true,
+  properties: {
+    options: [
+      { value: '1-10', label: '1-10 employees' },
+      { value: '11-50', label: '11-50 employees' },
+      { value: '51-200', label: '51-200 employees' },
+      { value: '200+', label: '200+ employees' }
+    ]
+  }
+});
+```
+
+### Compliance
+
+```typescript
+await polar.customFields.create({
+  type: 'checkbox',
+  slug: 'gdpr_consent',
+  name: 'I agree to the GDPR terms',
+  required: true
+});
+```
+
+### Custom Onboarding
+
+```typescript
+await polar.customFields.create({
+  type: 'textarea',
+  slug: 'use_case',
+  name: 'How will you use this product?',
+  required: false,
+  properties: {
+    minLength: 20,
+    maxLength: 500
+  }
+});
+```
+
+## Related
+
+- [Custom Fields Feature Guide](/features/custom-fields) - Detailed usage guide
+- [Checkouts](/api-reference/checkouts) - Checkout session API
+- [Orders](/api-reference/orders) - Access collected field data

@@ -1,0 +1,293 @@
+---
+title: "Checkout Links"
+description: "Create and manage reusable checkout links for your products"
+---
+
+Checkout Links are shareable URLs that customers can use to purchase your products. Unlike checkout sessions, checkout links are permanent and can be reused multiple times.
+
+## Base URL
+
+```
+https://api.polar.sh/v1/checkout-links
+```
+
+## Authentication
+
+All checkout link endpoints require authentication with an Organization Access Token or Personal Access Token with `checkout_links:write` scope.
+
+## List Checkout Links
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/checkout-links" \
+  -H "Authorization: Bearer polar_oat_..."
+```
+
+```python Python
+from polar_sdk import Polar
+
+client = Polar(access_token="polar_oat_...")
+checkout_links = client.checkout_links.list()
+```
+
+```typescript TypeScript
+import { Polar } from '@polar-sh/sdk';
+
+const polar = new Polar({
+  accessToken: 'polar_oat_...'
+});
+
+const checkoutLinks = await polar.checkoutLinks.list();
+```
+</CodeGroup>
+
+### Query Parameters
+
+<ParamField query="organization_id" type="string">
+  Filter by organization ID
+</ParamField>
+
+<ParamField query="product_id" type="string">
+  Filter by product ID
+</ParamField>
+
+<ParamField query="page" type="integer" default={1}>
+  Page number for pagination
+</ParamField>
+
+<ParamField query="limit" type="integer" default={10}>
+  Number of results per page (max 100)
+</ParamField>
+
+### Response
+
+<ResponseField name="items" type="array">
+  Array of checkout link objects
+  
+  <Expandable title="Checkout Link Object">
+    <ResponseField name="id" type="string">
+      Unique identifier for the checkout link
+    </ResponseField>
+    
+    <ResponseField name="client_secret" type="string">
+      Client secret for accessing the checkout link publicly
+    </ResponseField>
+    
+    <ResponseField name="url" type="string">
+      Full URL to the checkout page
+    </ResponseField>
+    
+    <ResponseField name="product_id" type="string">
+      ID of the associated product
+    </ResponseField>
+    
+    <ResponseField name="payment_processor" type="string">
+      Payment processor (stripe)
+    </ResponseField>
+    
+    <ResponseField name="success_url" type="string | null">
+      URL to redirect after successful checkout
+    </ResponseField>
+    
+    <ResponseField name="metadata" type="object">
+      Custom metadata attached to the checkout link
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  Pagination information
+  
+  <Expandable title="Pagination">
+    <ResponseField name="total_count" type="integer">
+      Total number of checkout links
+    </ResponseField>
+    
+    <ResponseField name="page" type="integer">
+      Current page number
+    </ResponseField>
+    
+    <ResponseField name="max_page" type="integer">
+      Maximum page number
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Get Checkout Link
+
+Retrieve a specific checkout link by ID.
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/checkout-links/{id}" \
+  -H "Authorization: Bearer polar_oat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The checkout link ID
+</ParamField>
+
+### Response
+
+Returns a checkout link object.
+
+## Create Checkout Link
+
+Create a new reusable checkout link for a product.
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/checkout-links" \
+  -H "Authorization: Bearer polar_oat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product_id": "prod_...",
+    "success_url": "https://example.com/success",
+    "metadata": {
+      "campaign": "launch_2024"
+    }
+  }'
+```
+
+```python Python
+checkout_link = client.checkout_links.create(
+    product_id="prod_...",
+    success_url="https://example.com/success",
+    metadata={"campaign": "launch_2024"}
+)
+```
+
+```typescript TypeScript
+const checkoutLink = await polar.checkoutLinks.create({
+  productId: 'prod_...',
+  successUrl: 'https://example.com/success',
+  metadata: {
+    campaign: 'launch_2024'
+  }
+});
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="product_id" type="string" required>
+  ID of the product to sell
+</ParamField>
+
+<ParamField body="payment_processor" type="string" default="stripe">
+  Payment processor to use
+</ParamField>
+
+<ParamField body="success_url" type="string">
+  URL to redirect customers after successful checkout
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Custom metadata (key-value pairs)
+</ParamField>
+
+### Response
+
+Returns the created checkout link object with `id` and `client_secret`.
+
+## Update Checkout Link
+
+Update an existing checkout link.
+
+```bash cURL
+curl -X PATCH "https://api.polar.sh/v1/checkout-links/{id}" \
+  -H "Authorization: Bearer polar_oat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "success_url": "https://example.com/new-success"
+  }'
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The checkout link ID
+</ParamField>
+
+### Request Body
+
+All fields are optional. Only include fields you want to update.
+
+<ParamField body="success_url" type="string">
+  New success URL
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Updated metadata (replaces existing metadata)
+</ParamField>
+
+### Response
+
+Returns the updated checkout link object.
+
+## Delete Checkout Link
+
+Delete a checkout link. This will make the link inaccessible.
+
+```bash cURL
+curl -X DELETE "https://api.polar.sh/v1/checkout-links/{id}" \
+  -H "Authorization: Bearer polar_oat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The checkout link ID to delete
+</ParamField>
+
+### Response
+
+Returns `204 No Content` on successful deletion.
+
+## Error Responses
+
+<ResponseField name="404 Not Found">
+  Checkout link not found or you don't have permission to access it
+</ResponseField>
+
+<ResponseField name="401 Unauthorized">
+  Missing or invalid authentication token
+</ResponseField>
+
+<ResponseField name="422 Unprocessable Entity">
+  Invalid request parameters
+</ResponseField>
+
+## Use Cases
+
+### Marketing Campaigns
+
+Create unique checkout links for different marketing channels:
+
+```typescript
+const emailLink = await polar.checkoutLinks.create({
+  productId: 'prod_...',
+  successUrl: 'https://example.com/thanks',
+  metadata: { source: 'email_campaign' }
+});
+
+const socialLink = await polar.checkoutLinks.create({
+  productId: 'prod_...',
+  successUrl: 'https://example.com/thanks',
+  metadata: { source: 'social_media' }
+});
+```
+
+### Embedded Checkout
+
+Share checkout links directly or embed them in your content:
+
+```html
+<a href="https://polar.sh/checkout/{client_secret}">Buy Now</a>
+```
+
+## Related Endpoints
+
+- [Checkouts](/api-reference/checkouts) - For programmatic checkout sessions
+- [Products](/api-reference/products) - Manage products

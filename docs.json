@@ -153,6 +153,7 @@
             "pages": [
               "api-reference/products",
               "api-reference/checkouts",
+              "api-reference/checkout-links",
               "api-reference/subscriptions",
               "api-reference/orders",
               "api-reference/customers"
@@ -164,7 +165,9 @@
               "api-reference/discounts",
               "api-reference/refunds",
               "api-reference/benefits",
-              "api-reference/license-keys"
+              "api-reference/license-keys",
+              "api-reference/custom-fields",
+              "api-reference/customer-seats"
             ]
           },
           {
