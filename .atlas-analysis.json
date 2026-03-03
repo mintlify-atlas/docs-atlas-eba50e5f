@@ -1,0 +1,226 @@
+{
+  "projectType": "saas",
+  "projectName": "Polar",
+  "projectDescription": "Open source payments infrastructure and merchant of record for developers to monetize digital products and SaaS.",
+  "theme": "maple",
+  "primaryColor": "#000000",
+  "lightColor": "#ffffff",
+  "darkColor": "#000000",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "migrate"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/products",
+              "features/checkout",
+              "features/subscriptions",
+              "features/orders",
+              "features/benefits"
+            ]
+          },
+          {
+            "group": "Usage-Based Billing",
+            "pages": [
+              "features/usage-based-billing/introduction",
+              "features/usage-based-billing/event-ingestion",
+              "features/usage-based-billing/meters",
+              "features/usage-based-billing/credits",
+              "features/usage-based-billing/billing"
+            ]
+          },
+          {
+            "group": "Payments & Billing",
+            "pages": [
+              "features/discounts",
+              "features/refunds",
+              "features/trials",
+              "features/seat-based-pricing",
+              "features/custom-fields"
+            ]
+          },
+          {
+            "group": "Customer Management",
+            "pages": [
+              "features/customer-management",
+              "features/customer-portal",
+              "features/analytics"
+            ]
+          },
+          {
+            "group": "Finance",
+            "pages": [
+              "features/finance/accounts",
+              "features/finance/balance",
+              "features/finance/payouts"
+            ]
+          },
+          {
+            "group": "Merchant of Record",
+            "pages": [
+              "merchant-of-record/introduction",
+              "merchant-of-record/fees",
+              "merchant-of-record/supported-countries",
+              "merchant-of-record/acceptable-use",
+              "merchant-of-record/account-reviews"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Integration",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "integrate/authentication",
+              "integrate/sandbox",
+              "integrate/customer-state"
+            ]
+          },
+          {
+            "group": "SDKs",
+            "pages": [
+              "integrate/sdk/typescript",
+              "integrate/sdk/python",
+              "integrate/sdk/php",
+              "integrate/sdk/golang"
+            ]
+          },
+          {
+            "group": "Framework Adapters",
+            "pages": [
+              "integrate/sdk/adapters/nextjs",
+              "integrate/sdk/adapters/astro",
+              "integrate/sdk/adapters/remix",
+              "integrate/sdk/adapters/sveltekit",
+              "integrate/sdk/adapters/laravel"
+            ]
+          },
+          {
+            "group": "Webhooks",
+            "pages": [
+              "integrate/webhooks/endpoints",
+              "integrate/webhooks/events",
+              "integrate/webhooks/delivery",
+              "integrate/webhooks/locally"
+            ]
+          },
+          {
+            "group": "OAuth 2.0",
+            "pages": [
+              "integrate/oauth2/introduction",
+              "integrate/oauth2/setup",
+              "integrate/oauth2/connect"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api-reference/introduction"
+            ]
+          },
+          {
+            "group": "Core Resources",
+            "pages": [
+              "api-reference/products",
+              "api-reference/checkouts",
+              "api-reference/subscriptions",
+              "api-reference/orders",
+              "api-reference/customers"
+            ]
+          },
+          {
+            "group": "Billing & Payments",
+            "pages": [
+              "api-reference/discounts",
+              "api-reference/refunds",
+              "api-reference/benefits",
+              "api-reference/license-keys"
+            ]
+          },
+          {
+            "group": "Usage-Based Billing",
+            "pages": [
+              "api-reference/events",
+              "api-reference/meters",
+              "api-reference/customer-meters"
+            ]
+          },
+          {
+            "group": "Management",
+            "pages": [
+              "api-reference/organizations",
+              "api-reference/webhooks",
+              "api-reference/files"
+            ]
+          },
+          {
+            "group": "Customer Portal API",
+            "pages": [
+              "api-reference/customer-portal/overview",
+              "api-reference/customer-portal/sessions",
+              "api-reference/customer-portal/subscriptions",
+              "api-reference/customer-portal/orders"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/introduction",
+              "guides/nextjs",
+              "guides/laravel",
+              "guides/checkout-session",
+              "guides/subscription-upgrades",
+              "guides/subscription-downgrades",
+              "guides/seat-based-pricing"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Payment processing and subscriptions",
+    "Usage-based billing with meters and credits",
+    "Customer portal and management",
+    "Multiple benefit types (license keys, file downloads, GitHub/Discord access)",
+    "Checkout links, embeds, and sessions",
+    "Merchant of record (MoR) with tax handling",
+    "Comprehensive API and webhooks",
+    "Multi-language SDKs and framework adapters",
+    "Analytics and financial reporting"
+  ],
+  "publicApiSurface": [
+    "POST /v1/checkouts/",
+    "GET /v1/products/",
+    "POST /v1/subscriptions/",
+    "GET /v1/customers/state",
+    "POST /v1/events/",
+    "GET /v1/orders/",
+    "POST /v1/webhooks/endpoints/",
+    "POST /v1/benefits/",
+    "GET /v1/meters/",
+    "POST /v1/refunds/"
+  ]
+}
