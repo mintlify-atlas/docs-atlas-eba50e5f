@@ -1,0 +1,259 @@
+---
+title: Refund Handling
+description: Process refunds for orders and manage benefit revocation
+---
+
+Polar provides comprehensive refund handling with automatic benefit revocation, tax calculation adjustments, and transaction accounting.
+
+## Overview
+
+Refunds can be issued for:
+- One-time purchases (orders)
+- Subscription charges
+- Both partial and full amounts
+
+<Note>
+Refunds are processed through Stripe and typically appear in the customer's account within 5-10 business days.
+</Note>
+
+## Creating a Refund
+
+<Steps>
+  <Step title="Find the Order">
+    Navigate to **Sales** > **Orders** and locate the order you want to refund.
+  </Step>
+  
+  <Step title="Initiate Refund">
+    Click **Refund** and specify the amount:
+    
+    ```json
+    {
+      "order_id": "order_xxx",
+      "amount": 5000,
+      "reason": "requested_by_customer",
+      "comment": "Customer requested refund via support ticket #123",
+      "revoke_benefits": true
+    }
+    ```
+  </Step>
+  
+  <Step title="Review and Confirm">
+    Review the refund details including tax adjustments and click **Confirm**.
+  </Step>
+</Steps>
+
+## Refund Reasons
+
+When creating a refund, specify a reason:
+
+- `duplicate`: Duplicate charge
+- `fraudulent`: Fraudulent transaction
+- `requested_by_customer`: Customer requested
+- `dispute_prevention`: Preventing a chargeback/dispute
+- `other`: Other reason
+
+<Note>
+The reason is sent to Stripe and helps with accounting and dispute management.
+</Note>
+
+## Partial Refunds
+
+You can issue partial refunds up to the refundable amount:
+
+```typescript
+// Refund $50 of a $100 order
+await polar.refunds.create({
+  orderId: 'order_xxx',
+  amount: 5000,  // Amount in cents
+  reason: 'requested_by_customer'
+});
+```
+
+<Warning>
+The refund amount cannot exceed the order's remaining refundable amount (total - previous refunds).
+</Warning>
+
+## Tax Handling
+
+Polar automatically calculates and processes tax refunds:
+
+1. **Tax Amount Calculation**: Proportional tax is calculated based on the refund amount
+2. **Tax Processor Update**: The tax transaction is reverted in the tax processor (e.g., Stripe Tax)
+3. **Accounting**: Both the refund amount and tax amount are recorded separately
+
+```json Example: $50 refund with $5 tax
+{
+  "amount": 5000,
+  "tax_amount": 500,
+  "total_refunded": 5500
+}
+```
+
+## Benefit Revocation
+
+When refunding one-time purchases, you can choose to revoke associated benefits:
+
+```json
+{
+  "order_id": "order_xxx",
+  "amount": 10000,
+  "revoke_benefits": true
+}
+```
+
+<Warning>
+**Subscription Limitations**: Benefits cannot be revoked via refund for active subscriptions. Benefits are automatically revoked when the subscription is fully canceled.
+</Warning>
+
+### How Benefit Revocation Works
+
+<Steps>
+  <Step title="Refund Created">
+    Refund is processed and marked for benefit revocation.
+  </Step>
+  
+  <Step title="Background Job">
+    A background task identifies all benefits granted from the refunded order.
+  </Step>
+  
+  <Step title="Benefits Revoked">
+    Each benefit is revoked according to its type (API keys deleted, webhooks sent, etc.).
+  </Step>
+</Steps>
+
+## Refund Status
+
+Refunds go through several statuses:
+
+- `pending`: Refund initiated, waiting for processor
+- `succeeded`: Refund completed successfully
+- `failed`: Refund failed (e.g., insufficient funds)
+- `canceled`: Refund was canceled before completion
+
+<Note>
+Only `succeeded` refunds trigger benefit revocation and accounting entries.
+</Note>
+
+## Customer Balance Impact
+
+When a refund is processed:
+
+1. **Positive Balance Reduction**: If the customer has a positive account balance, it's reduced by the refund amount
+2. **Transaction Recording**: A refund transaction is created in the customer's wallet
+3. **Event Emission**: An `order.refunded` event is emitted
+
+## Refund Blocking
+
+Certain orders cannot be refunded:
+
+- Orders with active disputes/chargebacks
+- Orders already fully refunded
+- Orders in certain fraud prevention states
+
+```json Error Response
+{
+  "error": "RefundsBlocked",
+  "message": "Refunds are blocked for order: order_xxx",
+  "status_code": 403
+}
+```
+
+## Dispute Prevention
+
+Polar can automatically issue refunds to prevent chargebacks:
+
+```json Automatic Refund
+{
+  "reason": "dispute_prevention",
+  "dispute": {
+    "id": "dispute_xxx",
+    "amount": 10000,
+    "reason": "fraudulent"
+  }
+}
+```
+
+<Note>
+When integrated with Chargeback Stop or similar services, Polar automatically issues refunds to prevent disputes and reduce chargeback fees.
+</Note>
+
+## Webhooks
+
+Refund events trigger webhooks:
+
+- `refund.created`: When a refund is initiated
+- `refund.updated`: When refund status changes
+- `order.refunded`: When an order's refund total changes
+
+```json refund.created Event
+{
+  "type": "refund.created",
+  "data": {
+    "id": "refund_xxx",
+    "amount": 5000,
+    "tax_amount": 500,
+    "status": "succeeded",
+    "order_id": "order_xxx",
+    "revoke_benefits": true
+  }
+}
+```
+
+## Internal Comments
+
+Add internal comments to refunds for record-keeping:
+
+```json
+{
+  "order_id": "order_xxx",
+  "amount": 5000,
+  "comment": "Customer reported billing issue. Verified and approved by support team."
+}
+```
+
+<Note>
+Comments are internal only and not visible to customers.
+</Note>
+
+## Metadata
+
+Attach custom metadata to refunds:
+
+```json
+{
+  "order_id": "order_xxx",
+  "amount": 5000,
+  "metadata": {
+    "support_ticket": "TICKET-12345",
+    "approved_by": "support@example.com"
+  }
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Document Everything" icon="file-lines">
+    Always add internal comments explaining why refunds were issued
+  </Card>
+  
+  <Card title="Review Before Revoking" icon="shield-check">
+    Consider the customer relationship before revoking benefits
+  </Card>
+  
+  <Card title="Track with Metadata" icon="tags">
+    Use metadata to link refunds to support tickets or incidents
+  </Card>
+  
+  <Card title="Monitor Patterns" icon="chart-line">
+    Track refund reasons to identify product or service issues
+  </Card>
+</CardGroup>
+
+## API Reference
+
+See the full API documentation:
+
+- [Create Refund](/api-reference/refunds/create)
+- [List Refunds](/api-reference/refunds/list)
+- [Get Refund](/api-reference/refunds/get)

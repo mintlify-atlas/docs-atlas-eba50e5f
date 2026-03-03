@@ -1,0 +1,454 @@
+---
+title: 'Subscription Upgrades'
+description: 'Handle subscription plan upgrades with automatic proration and billing adjustments'
+---
+
+This guide shows you how to implement subscription upgrades, handle prorations, and manage the billing implications of plan changes.
+
+## Overview
+
+When customers upgrade their subscription:
+1. They switch to a higher-tier plan
+2. Prorations credit unused time on the old plan
+3. New charges apply for the remaining period
+4. Next billing continues on the new plan
+
+## Basic Upgrade Flow
+
+<Steps>
+  <Step title="List available upgrade options">
+    Display higher-tier products to the customer:
+    ```typescript
+    const products = await polar.products.list({
+      organizationId: 'org_...',
+    })
+    
+    // Filter to show only upgrades
+    const upgrades = products.items.filter(product => {
+      const currentAmount = currentSubscription.amount
+      const upgradeAmount = product.prices[0].amount
+      return upgradeAmount > currentAmount
+    })
+    ```
+  </Step>
+  
+  <Step title="Update subscription">
+    Call the subscription update endpoint:
+    ```typescript
+    const updatedSubscription = await polar.subscriptions.update(
+      subscriptionId,
+      {
+        productId: 'prod_premium_...',
+      }
+    )
+    ```
+  </Step>
+  
+  <Step title="Handle immediate charge">
+    The customer is charged the prorated difference:
+    ```typescript
+    console.log('Upgraded successfully!')
+    console.log('New amount:', updatedSubscription.amount)
+    console.log('Next billing:', updatedSubscription.currentPeriodEnd)
+    ```
+  </Step>
+</Steps>
+
+## Proration Explained
+
+When upgrading mid-cycle, Polar automatically calculates proration:
+
+**Example:**
+- Current plan: $29/month
+- New plan: $99/month  
+- 15 days remaining in cycle
+- Days in month: 30
+
+**Calculation:**
+```
+Unused credit: $29 × (15/30) = $14.50
+New plan cost: $99 × (15/30) = $49.50
+Charge today: $49.50 - $14.50 = $35.00
+```
+
+The customer pays $35 now, then $99/month going forward.
+
+## Implementation Examples
+
+### Next.js App Router
+
+Create a server action for upgrades:
+
+```typescript
+// app/actions/subscription.ts
+'use server'
+
+import { polar } from '@/lib/polar'
+import { revalidatePath } from 'next/cache'
+
+export async function upgradeSubscription(
+  subscriptionId: string,
+  newProductId: string
+) {
+  try {
+    const subscription = await polar.subscriptions.update(
+      subscriptionId,
+      { productId: newProductId }
+    )
+    
+    revalidatePath('/dashboard/subscriptions')
+    return { success: true, subscription }
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error.message 
+    }
+  }
+}
+```
+
+Use in a component:
+
+```typescript
+// app/dashboard/subscriptions/[id]/upgrade/page.tsx
+'use client'
+
+import { upgradeSubscription } from '@/app/actions/subscription'
+import { useState } from 'react'
+
+interface UpgradePageProps {
+  params: { id: string }
+  currentSubscription: Subscription
+  availableProducts: Product[]
+}
+
+export default function UpgradePage({ 
+  params, 
+  currentSubscription,
+  availableProducts 
+}: UpgradePageProps) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleUpgrade(productId: string) {
+    if (!confirm('Upgrade your subscription?')) return
+    
+    setLoading(true)
+    setError(null)
+    
+    const result = await upgradeSubscription(params.id, productId)
+    
+    if (result.success) {
+      alert('Subscription upgraded successfully!')
+    } else {
+      setError(result.error)
+    }
+    
+    setLoading(false)
+  }
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-3xl font-bold">Upgrade Subscription</h1>
+      
+      {error && (
+        <div className="bg-red-50 text-red-600 p-4 rounded-lg">
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {availableProducts.map((product) => {
+          const price = product.prices[0]
+          const isUpgrade = price.amount > currentSubscription.amount
+          
+          if (!isUpgrade) return null
+
+          return (
+            <div key={product.id} className="border rounded-lg p-6">
+              <h2 className="text-2xl font-bold">{product.name}</h2>
+              <p className="text-gray-600 my-4">{product.description}</p>
+              
+              <div className="text-3xl font-bold mb-4">
+                ${price.amount / 100}
+                <span className="text-sm text-gray-500">/{price.recurringInterval}</span>
+              </div>
+
+              <ul className="space-y-2 mb-6">
+                {product.benefits.map((benefit) => (
+                  <li key={benefit.id} className="flex items-start">
+                    <svg className="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                    {benefit.description}
+                  </li>
+                ))}
+              </ul>
+
+              <button
+                onClick={() => handleUpgrade(product.id)}
+                disabled={loading}
+                className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {loading ? 'Upgrading...' : 'Upgrade Now'}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+```
+
+### Laravel
+
+Create a controller for upgrades:
+
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\PolarSubscription;
+use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
+use Polar\Polar;
+
+class SubscriptionUpgradeController extends Controller
+{
+    public function __construct(
+        private Polar $polar
+    ) {}
+
+    public function index(PolarSubscription $subscription)
+    {
+        // Get available upgrade products
+        $products = $this->polar->products->list(
+            organizationId: config('services.polar.organization_id')
+        );
+
+        // Filter to show only upgrades
+        $upgrades = array_filter($products->items, function($product) use ($subscription) {
+            $upgradeAmount = $product->prices[0]->amount;
+            return $upgradeAmount > $subscription->amount;
+        });
+
+        return view('subscriptions.upgrade', [
+            'subscription' => $subscription,
+            'products' => $upgrades,
+        ]);
+    }
+
+    public function upgrade(
+        Request $request, 
+        PolarSubscription $subscription
+    ): RedirectResponse {
+        $request->validate([
+            'product_id' => 'required|string',
+        ]);
+
+        try {
+            $updated = $this->polar->subscriptions->update(
+                $subscription->polar_subscription_id,
+                productId: $request->product_id
+            );
+
+            // Update local database
+            $subscription->update([
+                'polar_product_id' => $updated->productId,
+                'amount' => $updated->amount,
+                'status' => $updated->status,
+            ]);
+
+            return redirect()->route('subscriptions.show', $subscription)
+                ->with('success', 'Subscription upgraded successfully!');
+        } catch (\Exception $e) {
+            return back()->with('error', 'Failed to upgrade: ' . $e->getMessage());
+        }
+    }
+}
+```
+
+Blade template:
+
+```php
+<!-- resources/views/subscriptions/upgrade.blade.php -->
+<x-app-layout>
+    <div class="py-12">
+        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+            <h1 class="text-3xl font-bold mb-8">Upgrade Your Subscription</h1>
+
+            @if(session('error'))
+                <div class="bg-red-50 text-red-600 p-4 rounded-lg mb-4">
+                    {{ session('error') }}
+                </div>
+            @endif
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                @foreach($products as $product)
+                    <div class="bg-white shadow-sm rounded-lg p-6">
+                        <h2 class="text-2xl font-semibold mb-2">{{ $product->name }}</h2>
+                        <p class="text-gray-600 mb-4">{{ $product->description }}</p>
+
+                        <div class="text-3xl font-bold mb-6">
+                            ${{ $product->prices[0]->amount / 100 }}
+                            <span class="text-sm text-gray-500">/ {{ $product->prices[0]->recurringInterval }}</span>
+                        </div>
+
+                        <form method="POST" action="{{ route('subscriptions.upgrade', $subscription) }}">
+                            @csrf
+                            <input type="hidden" name="product_id" value="{{ $product->id }}">
+                            <button 
+                                type="submit"
+                                onclick="return confirm('Upgrade to {{ $product->name }}?')"
+                                class="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700"
+                            >
+                                Upgrade Now
+                            </button>
+                        </form>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    </div>
+</x-app-layout>
+```
+
+## Handling Upgrade Failures
+
+Handle common upgrade errors:
+
+```typescript
+try {
+  const updated = await polar.subscriptions.update(subscriptionId, {
+    productId: newProductId,
+  })
+} catch (error) {
+  if (error.statusCode === 404) {
+    // Subscription or product not found
+    alert('Invalid subscription or product')
+  } else if (error.statusCode === 403) {
+    // Cannot upgrade (e.g., subscription canceled)
+    alert('This subscription cannot be upgraded')
+  } else if (error.statusCode === 402) {
+    // Payment method failed
+    alert('Payment failed. Please update your payment method.')
+  } else if (error.statusCode === 409) {
+    // Subscription is locked (another update in progress)
+    alert('Please wait for the current update to complete')
+  } else {
+    alert('Upgrade failed. Please try again.')
+  }
+}
+```
+
+## Webhook Handling
+
+Listen for subscription updates:
+
+```typescript
+app.post('/webhooks/polar', (req, res) => {
+  const event = polar.webhooks.verifyEvent(...)
+  
+  if (event.type === 'subscription.updated') {
+    const subscription = event.data
+    
+    // Update your database
+    await updateSubscription({
+      id: subscription.id,
+      productId: subscription.productId,
+      amount: subscription.amount,
+      status: subscription.status,
+    })
+    
+    // Send confirmation email
+    await sendEmail(subscription.customer.email, {
+      subject: 'Subscription Upgraded',
+      template: 'subscription-upgraded',
+      data: { subscription },
+    })
+  }
+  
+  res.json({ received: true })
+})
+```
+
+## Proration Behavior Options
+
+Control how prorations are handled:
+
+```typescript
+const subscription = await polar.subscriptions.update(
+  subscriptionId,
+  {
+    productId: newProductId,
+    prorationBehavior: 'create_prorations', // default
+  }
+)
+```
+
+Options:
+- **create_prorations** (default): Credits old plan, charges new plan
+- **always_invoice**: Immediately invoices the difference
+
+## Testing Upgrades
+
+Test the upgrade flow:
+
+<Steps>
+  <Step title="Create test subscription">
+    ```bash
+    # Use test API key
+    POLAR_API_KEY=polar_sk_test_...
+    ```
+  </Step>
+  
+  <Step title="Upgrade to higher tier">
+    Test with different pricing tiers to see proration.
+  </Step>
+  
+  <Step title="Check Stripe dashboard">
+    View the proration line items in test mode.
+  </Step>
+  
+  <Step title="Verify webhooks">
+    Confirm `subscription.updated` webhook is received.
+  </Step>
+</Steps>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="User Experience">
+    - Show proration preview before confirming
+    - Clearly communicate billing changes
+    - Send confirmation emails
+    - Update UI immediately after upgrade
+  </Accordion>
+  
+  <Accordion title="Error Handling">
+    - Handle payment failures gracefully
+    - Provide retry options
+    - Log all upgrade attempts
+    - Alert on repeated failures
+  </Accordion>
+  
+  <Accordion title="Business Logic">
+    - Validate product eligibility
+    - Check for active subscriptions
+    - Prevent downgrades via this flow
+    - Handle trial to paid upgrades
+  </Accordion>
+</AccordionGroup>
+
+## Related Guides
+
+<CardGroup cols={2}>
+  <Card title="Subscription Downgrades" icon="arrow-down" href="/guides/subscription-downgrades">
+    Handle plan downgrades and cancellations
+  </Card>
+  <Card title="Seat-Based Pricing" icon="users" href="/guides/seat-based-pricing">
+    Manage team subscription upgrades
+  </Card>
+</CardGroup>

@@ -1,0 +1,395 @@
+---
+title: Delivery & Security
+description: Understand webhook delivery reliability, retries, and signature verification
+---
+
+Polar ensures reliable webhook delivery with automatic retries and provides signature verification to secure your webhook endpoints.
+
+## Delivery Guarantees
+
+### At-Least-Once Delivery
+
+Polar guarantees **at-least-once delivery** for webhook events. This means:
+
+- Every event will be delivered to your endpoint at least once
+- Events may be delivered more than once in rare cases (e.g., network issues, retries)
+- Your endpoint should be **idempotent** - processing the same event multiple times should be safe
+
+### Ordering Guarantee
+
+Polar delivers events **in order** for each endpoint:
+
+- Events are delivered in the order they were created
+- A newer event won't be delivered until earlier events succeed
+- This is enforced with a configurable age limit to prevent indefinite blocking
+
+<Note>
+  If an event is older than the age limit (configured in settings) and earlier events are still pending, the newer event will be delivered anyway to prevent indefinite delays.
+</Note>
+
+## Retry Logic
+
+### Success Criteria
+
+A webhook delivery is considered successful when:
+
+- Your endpoint returns an HTTP status code in the **2xx range** (200-299)
+- The response is received within **10 seconds**
+
+### Failure Scenarios
+
+A delivery fails if:
+
+- Non-2xx status code is returned (3xx, 4xx, 5xx)
+- Request times out (>10 seconds)
+- Connection cannot be established
+- TLS/SSL errors occur
+
+### Retry Schedule
+
+Polar automatically retries failed deliveries with exponential backoff:
+
+1. **Immediate:** First retry after a few seconds
+2. **Gradual:** Subsequent retries with increasing delays
+3. **Maximum attempts:** Up to 10 retries per event
+
+**Example retry schedule:**
+- Attempt 1: Immediate
+- Attempt 2: ~30 seconds
+- Attempt 3: ~1 minute
+- Attempt 4: ~5 minutes
+- Attempt 5: ~15 minutes
+- ...up to attempt 10
+
+<Warning>
+  After **10 consecutive failed deliveries**, the webhook endpoint is automatically disabled. See [Managing Endpoints](/integrate/webhooks/endpoints#automatic-disabling) for details.
+</Warning>
+
+## Signature Verification
+
+All webhooks sent by Polar include cryptographic signatures to verify authenticity. **You should always verify these signatures** to ensure the webhook came from Polar.
+
+### How It Works
+
+Polar uses the [Standard Webhooks](https://www.standardwebhooks.com/) specification:
+
+1. Each webhook request includes these headers:
+   - `webhook-id`: Unique event ID
+   - `webhook-timestamp`: Unix timestamp when the webhook was sent
+   - `webhook-signature`: HMAC signature of the payload
+
+2. The signature is computed using HMAC-SHA256 with your webhook secret
+
+3. The signed message format: `{webhook-id}.{webhook-timestamp}.{payload}`
+
+### Verification Libraries
+
+Use the official Standard Webhooks libraries for secure verification:
+
+#### Python
+
+```python
+from fastapi import Request, HTTPException
+from svix.webhooks import Webhook, WebhookVerificationError
+
+WEBHOOK_SECRET = "polar_whs_..."  # From webhook endpoint creation
+
+@app.post("/webhooks")
+async def webhook_handler(request: Request):
+    # Get headers
+    webhook_id = request.headers.get("webhook-id")
+    webhook_timestamp = request.headers.get("webhook-timestamp")
+    webhook_signature = request.headers.get("webhook-signature")
+    
+    if not all([webhook_id, webhook_timestamp, webhook_signature]):
+        raise HTTPException(status_code=400, detail="Missing webhook headers")
+    
+    # Get body
+    body = await request.body()
+    
+    # Verify signature
+    wh = Webhook(WEBHOOK_SECRET)
+    try:
+        payload = wh.verify(body, {
+            "webhook-id": webhook_id,
+            "webhook-timestamp": webhook_timestamp,
+            "webhook-signature": webhook_signature,
+        })
+    except WebhookVerificationError as e:
+        raise HTTPException(status_code=401, detail="Invalid signature")
+    
+    # Process the verified payload
+    event_type = payload["type"]
+    event_data = payload["data"]
+    
+    if event_type == "order.paid":
+        # Grant access to customer
+        await grant_access(event_data["customer"]["email"])
+    
+    return {"ok": True}
+```
+
+#### Node.js / TypeScript
+
+```typescript
+import { Webhook } from "standardwebhooks";
+import { Request, Response } from "express";
+
+const WEBHOOK_SECRET = "polar_whs_..."; // From webhook endpoint creation
+
+app.post("/webhooks", async (req: Request, res: Response) => {
+  const webhookId = req.headers["webhook-id"] as string;
+  const webhookTimestamp = req.headers["webhook-timestamp"] as string;
+  const webhookSignature = req.headers["webhook-signature"] as string;
+
+  if (!webhookId || !webhookTimestamp || !webhookSignature) {
+    return res.status(400).json({ error: "Missing webhook headers" });
+  }
+
+  const body = JSON.stringify(req.body);
+
+  const wh = new Webhook(WEBHOOK_SECRET);
+  try {
+    const payload = wh.verify(body, {
+      "webhook-id": webhookId,
+      "webhook-timestamp": webhookTimestamp,
+      "webhook-signature": webhookSignature,
+    });
+
+    // Process the verified payload
+    if (payload.type === "order.paid") {
+      await grantAccess(payload.data.customer.email);
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid signature" });
+  }
+});
+```
+
+#### Go
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "io"
+    "net/http"
+    
+    "github.com/standard-webhooks/standard-webhooks/libraries/go"
+)
+
+const webhookSecret = "polar_whs_..." // From webhook endpoint creation
+
+func webhookHandler(w http.ResponseWriter, r *http.Request) {
+    body, err := io.ReadAll(r.Body)
+    if err != nil {
+        http.Error(w, "Failed to read body", http.StatusBadRequest)
+        return
+    }
+
+    wh, err := webhooks.NewWebhook(webhookSecret)
+    if err != nil {
+        http.Error(w, "Invalid webhook secret", http.StatusInternalServerError)
+        return
+    }
+
+    headers := http.Header{}
+    headers.Set("webhook-id", r.Header.Get("webhook-id"))
+    headers.Set("webhook-timestamp", r.Header.Get("webhook-timestamp"))
+    headers.Set("webhook-signature", r.Header.Get("webhook-signature"))
+
+    var payload map[string]interface{}
+    err = wh.Verify(body, headers)
+    if err != nil {
+        http.Error(w, "Invalid signature", http.StatusUnauthorized)
+        return
+    }
+
+    json.Unmarshal(body, &payload)
+
+    // Process the verified payload
+    if payload["type"] == "order.paid" {
+        // Grant access
+    }
+
+    w.WriteHeader(http.StatusOK)
+    json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+}
+```
+
+### Manual Verification
+
+If you can't use the Standard Webhooks library, you can verify manually:
+
+```python
+import hmac
+import hashlib
+import base64
+
+def verify_webhook_signature(
+    payload: bytes,
+    webhook_id: str,
+    webhook_timestamp: str,
+    webhook_signature: str,
+    secret: str
+) -> bool:
+    # Construct the signed message
+    signed_content = f"{webhook_id}.{webhook_timestamp}.{payload.decode()}"
+    
+    # Decode the secret (it's base64 encoded)
+    secret_bytes = base64.b64decode(secret)
+    
+    # Compute HMAC-SHA256
+    expected_signature = hmac.new(
+        secret_bytes,
+        signed_content.encode(),
+        hashlib.sha256
+    ).digest()
+    
+    # The signature in the header is base64 encoded
+    expected_signature_b64 = base64.b64encode(expected_signature).decode()
+    
+    # Extract the signature from the header (format: "v1,<signature>")
+    # Standard Webhooks uses versioned signatures
+    signature_parts = webhook_signature.split(",")
+    for part in signature_parts:
+        if part.startswith("v1,"):
+            provided_signature = part[3:]  # Remove "v1," prefix
+            return hmac.compare_digest(provided_signature, expected_signature_b64)
+    
+    return False
+```
+
+<Warning>
+  **Security Best Practices:**
+  
+  - Always verify webhook signatures before processing
+  - Use constant-time comparison (`hmac.compare_digest`) to prevent timing attacks
+  - Validate the timestamp to prevent replay attacks (reject webhooks older than 5 minutes)
+  - Store webhook secrets securely in environment variables
+  - Never log or expose webhook secrets
+</Warning>
+
+## Monitoring Deliveries
+
+### Via Dashboard
+
+1. Go to Settings → Webhooks
+2. Click "Deliveries" tab
+3. Filter by:
+   - Endpoint
+   - Event type
+   - Success/failure status
+   - HTTP status code
+   - Time range
+
+### Via API
+
+```python
+deliveries = client.webhooks.list_deliveries(
+    endpoint_id="whe_...",
+    succeeded=False,  # Filter failed deliveries
+    http_code_class="5xx",
+    start_timestamp="2024-03-15T00:00:00Z"
+)
+
+for delivery in deliveries.items:
+    print(f"{delivery.created_at}: {delivery.http_code} - {delivery.response}")
+```
+
+## Redelivering Events
+
+You can manually redeliver failed events:
+
+### Via Dashboard
+
+1. Go to Settings → Webhooks → Deliveries
+2. Find the failed delivery
+3. Click "Redeliver"
+
+### Via API
+
+```python
+client.webhooks.redeliver_event(id="whe_...")
+```
+
+<Note>
+  Redelivery bypasses the ordering guarantee and sends the event immediately, even if earlier events are still pending.
+</Note>
+
+## Best Practices
+
+### Endpoint Design
+
+✅ **Do:**
+- Return 2xx status codes quickly (within 10 seconds)
+- Queue events for asynchronous processing
+- Make your handler idempotent
+- Log webhook IDs to detect duplicates
+- Verify signatures on every request
+- Use HTTPS endpoints
+
+❌ **Don't:**
+- Perform long-running operations synchronously
+- Return non-2xx for processing errors (use 2xx and handle errors async)
+- Trust webhook data without signature verification
+- Expose webhook endpoints without authentication
+
+### Idempotency Pattern
+
+```python
+import asyncpg
+
+async def process_webhook(webhook_id: str, payload: dict):
+    async with db_pool.acquire() as conn:
+        # Check if we've already processed this webhook
+        existing = await conn.fetchrow(
+            "SELECT id FROM processed_webhooks WHERE webhook_id = $1",
+            webhook_id
+        )
+        
+        if existing:
+            # Already processed, skip
+            return {"ok": True, "status": "duplicate"}
+        
+        # Process the webhook
+        if payload["type"] == "order.paid":
+            await grant_access(payload["data"]["customer"]["email"])
+        
+        # Mark as processed
+        await conn.execute(
+            "INSERT INTO processed_webhooks (webhook_id, processed_at) VALUES ($1, NOW())",
+            webhook_id
+        )
+        
+        return {"ok": True, "status": "processed"}
+```
+
+### Error Handling
+
+```python
+@app.post("/webhooks")
+async def webhook_handler(request: Request):
+    try:
+        # Verify signature first
+        payload = await verify_webhook(request)
+        
+        # Queue for processing (don't process synchronously)
+        await webhook_queue.enqueue(payload)
+        
+        # Return success immediately
+        return {"ok": True}
+    
+    except WebhookVerificationError:
+        # Invalid signature - reject
+        raise HTTPException(status_code=401)
+    
+    except Exception as e:
+        # Log error but still return 2xx to prevent retries
+        # (the event is queued, so it will be processed)
+        logger.error(f"Failed to queue webhook: {e}")
+        return {"ok": True, "queued": False}
+```

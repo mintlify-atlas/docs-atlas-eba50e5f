@@ -1,0 +1,539 @@
+---
+title: 'Next.js Integration'
+description: 'Complete guide to integrating Polar with Next.js App Router using server actions and webhooks'
+---
+
+This guide walks through building a complete Next.js application with Polar checkout, subscription management, and customer portal functionality.
+
+## Prerequisites
+
+- Next.js 14+ with App Router
+- Node.js 18+
+- Polar account with API keys
+- At least one product created in Polar
+
+## Installation
+
+Install the Polar SDK:
+
+```bash
+npm install @polar-sh/sdk
+# or
+pnpm add @polar-sh/sdk
+# or
+yarn add @polar-sh/sdk
+```
+
+## Environment Setup
+
+Create a `.env.local` file:
+
+```bash
+POLAR_API_KEY=polar_sk_...
+POLAR_ORGANIZATION_ID=your-org-id
+POLAR_WEBHOOK_SECRET=whsec_...
+```
+
+<Warning>
+  Never commit your `.env.local` file. Add it to `.gitignore`.
+</Warning>
+
+## SDK Configuration
+
+Create a Polar client instance in `lib/polar.ts`:
+
+```typescript
+import { Polar } from '@polar-sh/sdk'
+
+if (!process.env.POLAR_API_KEY) {
+  throw new Error('POLAR_API_KEY is required')
+}
+
+export const polar = new Polar({
+  accessToken: process.env.POLAR_API_KEY,
+})
+
+export const ORGANIZATION_ID = process.env.POLAR_ORGANIZATION_ID!
+```
+
+## Creating Checkout Sessions
+
+Create a server action for checkout in `app/actions/checkout.ts`:
+
+```typescript
+'use server'
+
+import { polar, ORGANIZATION_ID } from '@/lib/polar'
+import { redirect } from 'next/navigation'
+
+export async function createCheckout(productPriceId: string) {
+  try {
+    const checkout = await polar.checkouts.create({
+      productPriceId,
+      successUrl: `${process.env.NEXT_PUBLIC_URL}/success?checkout_id={CHECKOUT_ID}`,
+      metadata: {
+        source: 'nextjs-app',
+      },
+    })
+
+    // Redirect to Polar's hosted checkout page
+    redirect(checkout.url)
+  } catch (error) {
+    console.error('Failed to create checkout:', error)
+    throw new Error('Failed to initiate checkout')
+  }
+}
+```
+
+## Products Page
+
+Display products with checkout buttons in `app/products/page.tsx`:
+
+```typescript
+import { polar, ORGANIZATION_ID } from '@/lib/polar'
+import { createCheckout } from '@/app/actions/checkout'
+import { CheckoutButton } from '@/components/CheckoutButton'
+
+export default async function ProductsPage() {
+  const { items: products } = await polar.products.list({
+    organizationId: ORGANIZATION_ID,
+  })
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-8">
+      {products.map((product) => (
+        <div key={product.id} className="border rounded-lg p-6">
+          <h2 className="text-2xl font-bold">{product.name}</h2>
+          <p className="text-gray-600 my-4">{product.description}</p>
+          
+          {product.prices.map((price) => (
+            <div key={price.id} className="mb-4">
+              <p className="text-lg">
+                ${price.amount / 100}
+                {price.recurringInterval && (
+                  <span className="text-sm text-gray-500">
+                    /{price.recurringInterval}
+                  </span>
+                )}
+              </p>
+              
+              <CheckoutButton 
+                productPriceId={price.id}
+                label="Subscribe Now"
+              />
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+Create the client component `components/CheckoutButton.tsx`:
+
+```typescript
+'use client'
+
+import { createCheckout } from '@/app/actions/checkout'
+import { useState } from 'react'
+
+interface CheckoutButtonProps {
+  productPriceId: string
+  label: string
+}
+
+export function CheckoutButton({ productPriceId, label }: CheckoutButtonProps) {
+  const [loading, setLoading] = useState(false)
+
+  const handleCheckout = async () => {
+    setLoading(true)
+    try {
+      await createCheckout(productPriceId)
+    } catch (error) {
+      alert('Checkout failed. Please try again.')
+      setLoading(false)
+    }
+  }
+
+  return (
+    <button
+      onClick={handleCheckout}
+      disabled={loading}
+      className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+    >
+      {loading ? 'Loading...' : label}
+    </button>
+  )
+}
+```
+
+## Success Page
+
+Handle post-checkout in `app/success/page.tsx`:
+
+```typescript
+import { polar } from '@/lib/polar'
+import { redirect } from 'next/navigation'
+
+interface SuccessPageProps {
+  searchParams: { checkout_id?: string }
+}
+
+export default async function SuccessPage({ searchParams }: SuccessPageProps) {
+  const checkoutId = searchParams.checkout_id
+
+  if (!checkoutId) {
+    redirect('/products')
+  }
+
+  try {
+    const checkout = await polar.checkouts.get(checkoutId)
+
+    if (checkout.status !== 'confirmed') {
+      return (
+        <div className="p-8">
+          <h1 className="text-2xl font-bold mb-4">Processing Payment...</h1>
+          <p>Your payment is being processed. Please wait.</p>
+        </div>
+      )
+    }
+
+    return (
+      <div className="p-8">
+        <h1 className="text-2xl font-bold text-green-600 mb-4">
+          Payment Successful!
+        </h1>
+        <p className="mb-4">
+          Thank you for your purchase. You'll receive a confirmation email shortly.
+        </p>
+        
+        {checkout.customer && (
+          <div className="bg-gray-100 p-4 rounded-lg">
+            <p><strong>Order ID:</strong> {checkout.id}</p>
+            <p><strong>Customer:</strong> {checkout.customer.email}</p>
+            <p><strong>Amount:</strong> ${checkout.amount / 100} {checkout.currency}</p>
+          </div>
+        )}
+
+        <a 
+          href="/dashboard" 
+          className="inline-block mt-6 bg-blue-600 text-white px-6 py-2 rounded-lg"
+        >
+          Go to Dashboard
+        </a>
+      </div>
+    )
+  } catch (error) {
+    return (
+      <div className="p-8">
+        <h1 className="text-2xl font-bold text-red-600">Error</h1>
+        <p>Unable to verify checkout. Please contact support.</p>
+      </div>
+    )
+  }
+}
+```
+
+## Webhook Handler
+
+Set up webhook handling in `app/api/webhooks/polar/route.ts`:
+
+```typescript
+import { polar } from '@/lib/polar'
+import { headers } from 'next/headers'
+import { NextResponse } from 'next/server'
+
+export async function POST(req: Request) {
+  const body = await req.text()
+  const signature = headers().get('polar-signature')
+
+  if (!signature) {
+    return NextResponse.json(
+      { error: 'Missing signature' },
+      { status: 401 }
+    )
+  }
+
+  try {
+    const event = polar.webhooks.verifyEvent(
+      body,
+      signature,
+      process.env.POLAR_WEBHOOK_SECRET!
+    )
+
+    console.log('Received webhook:', event.type)
+
+    switch (event.type) {
+      case 'checkout.created':
+        console.log('Checkout created:', event.data.id)
+        break
+
+      case 'checkout.updated':
+        if (event.data.status === 'confirmed') {
+          // Provision access to product
+          console.log('Checkout confirmed:', event.data.id)
+          await provisionAccess(event.data)
+        }
+        break
+
+      case 'order.created':
+        console.log('Order created:', event.data.id)
+        // Store order in your database
+        break
+
+      case 'subscription.created':
+        console.log('Subscription created:', event.data.id)
+        // Grant subscription access
+        break
+
+      case 'subscription.updated':
+        console.log('Subscription updated:', event.data.id)
+        // Update subscription status
+        break
+
+      case 'subscription.canceled':
+        console.log('Subscription canceled:', event.data.id)
+        // Revoke access at period end
+        break
+
+      case 'subscription.revoked':
+        console.log('Subscription revoked:', event.data.id)
+        // Immediately revoke access
+        break
+
+      default:
+        console.log('Unhandled event type:', event.type)
+    }
+
+    return NextResponse.json({ received: true })
+  } catch (error) {
+    console.error('Webhook error:', error)
+    return NextResponse.json(
+      { error: 'Webhook processing failed' },
+      { status: 400 }
+    )
+  }
+}
+
+async function provisionAccess(checkout: any) {
+  // Implement your access provisioning logic
+  // Examples:
+  // - Add user to database
+  // - Send welcome email
+  // - Grant product access
+  // - Create license key
+  
+  console.log('Provisioning access for:', checkout.customer?.email)
+}
+```
+
+## Customer Portal
+
+Create a customer dashboard in `app/dashboard/page.tsx`:
+
+```typescript
+'use client'
+
+import { useEffect, useState } from 'react'
+import { polar } from '@/lib/polar'
+
+export default function DashboardPage() {
+  const [subscriptions, setSubscriptions] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadSubscriptions()
+  }, [])
+
+  async function loadSubscriptions() {
+    try {
+      // Get customer session token (implement your auth)
+      const token = await getCustomerToken()
+      
+      const response = await fetch(
+        'https://api.polar.sh/v1/customer-portal/subscriptions',
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+
+      const data = await response.json()
+      setSubscriptions(data.items)
+    } catch (error) {
+      console.error('Failed to load subscriptions:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function cancelSubscription(subscriptionId: string) {
+    if (!confirm('Are you sure you want to cancel?')) return
+
+    try {
+      const token = await getCustomerToken()
+      
+      await fetch(
+        `https://api.polar.sh/v1/customer-portal/subscriptions/${subscriptionId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+
+      await loadSubscriptions()
+      alert('Subscription will be canceled at the end of the billing period.')
+    } catch (error) {
+      alert('Failed to cancel subscription')
+    }
+  }
+
+  if (loading) {
+    return <div className="p-8">Loading...</div>
+  }
+
+  return (
+    <div className="p-8">
+      <h1 className="text-3xl font-bold mb-6">My Subscriptions</h1>
+
+      {subscriptions.length === 0 ? (
+        <p className="text-gray-600">No active subscriptions</p>
+      ) : (
+        <div className="space-y-4">
+          {subscriptions.map((sub) => (
+            <div key={sub.id} className="border rounded-lg p-6">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h2 className="text-xl font-semibold">
+                    {sub.product.name}
+                  </h2>
+                  <p className="text-gray-600 mt-1">
+                    ${sub.amount / 100} / {sub.recurring_interval}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-2">
+                    Next billing: {new Date(sub.current_period_end).toLocaleDateString()}
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  {!sub.cancel_at_period_end && (
+                    <button
+                      onClick={() => cancelSubscription(sub.id)}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                  
+                  {sub.cancel_at_period_end && (
+                    <span className="text-orange-600">
+                      Cancels on {new Date(sub.current_period_end).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Implement this based on your auth system
+async function getCustomerToken(): Promise<string> {
+  // Your customer authentication logic here
+  throw new Error('Implement customer authentication')
+}
+```
+
+## Testing
+
+<Steps>
+  <Step title="Start development server">
+    ```bash
+    npm run dev
+    ```
+  </Step>
+  
+  <Step title="Navigate to products page">
+    Visit `http://localhost:3000/products` and click a checkout button.
+  </Step>
+  
+  <Step title="Complete test checkout">
+    Use Stripe test card `4242 4242 4242 4242` to complete the checkout.
+  </Step>
+  
+  <Step title="Verify webhook">
+    Check your server logs for webhook events. For local testing, use:
+    ```bash
+    ngrok http 3000
+    ```
+    Then add the ngrok URL to your Polar webhook settings.
+  </Step>
+</Steps>
+
+## Error Handling
+
+Add comprehensive error handling:
+
+```typescript
+try {
+  const checkout = await polar.checkouts.create({ ... })
+} catch (error) {
+  if (error.statusCode === 404) {
+    console.error('Product not found')
+  } else if (error.statusCode === 403) {
+    console.error('Not authorized to create checkout')
+  } else if (error.statusCode === 422) {
+    console.error('Validation error:', error.body)
+  } else {
+    console.error('Unexpected error:', error)
+  }
+  throw error
+}
+```
+
+## Production Checklist
+
+<AccordionGroup>
+  <Accordion title="Security">
+    - Use environment variables for all secrets
+    - Verify webhook signatures
+    - Implement rate limiting
+    - Use HTTPS in production
+    - Validate all user inputs
+  </Accordion>
+  
+  <Accordion title="Performance">
+    - Cache product listings
+    - Use React Server Components for data fetching
+    - Implement proper loading states
+    - Optimize images and assets
+  </Accordion>
+  
+  <Accordion title="User Experience">
+    - Add loading indicators
+    - Show clear error messages
+    - Implement retry logic for failed payments
+    - Send confirmation emails
+    - Provide receipt downloads
+  </Accordion>
+  
+  <Accordion title="Monitoring">
+    - Log all webhook events
+    - Monitor checkout conversion rates
+    - Track failed payments
+    - Set up error alerting
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+- [Handle Subscription Upgrades](/guides/subscription-upgrades)
+- [Implement Seat-Based Pricing](/guides/seat-based-pricing)
+- [Set up Customer Portal](/api-reference/customer-portal/overview)

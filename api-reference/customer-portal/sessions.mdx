@@ -1,0 +1,274 @@
+---
+title: 'Customer Sessions'
+description: 'Authenticate customers and manage portal access with magic link codes'
+---
+
+Customer sessions enable passwordless authentication for your customers to access their purchases, subscriptions, and account settings.
+
+## Request Session Code
+
+Send a magic link code to a customer's email address.
+
+```bash
+POST /v1/customer-portal/customer-session/request
+```
+
+### Request Body
+
+<ParamField body="email" type="string" required>
+  The customer's email address.
+</ParamField>
+
+<ParamField body="organization_id" type="string" required>
+  Your organization ID (UUID format).
+</ParamField>
+
+<ParamField body="customer_id" type="string">
+  Optional customer ID for disambiguation when multiple customers share the same email.
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="number">
+  202 - Request accepted. Email sent to customer.
+</ResponseField>
+
+### Example
+
+```bash
+curl -X POST https://api.polar.sh/v1/customer-portal/customer-session/request \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "customer@example.com",
+    "organization_id": "01234567-89ab-cdef-0123-456789abcdef"
+  }'
+```
+
+<Note>
+  For security, this endpoint always returns 202, even if the customer doesn't exist. This prevents email enumeration attacks.
+</Note>
+
+### Multiple Customers
+
+If multiple customers exist with the same email, the endpoint returns 409 with selection options:
+
+```json
+{
+  "error": "customer_selection_required",
+  "detail": "Multiple customers found for this email. Please select one.",
+  "customers": [
+    {
+      "id": "01234567-89ab-cdef-0123-456789abcdef",
+      "name": "Acme Corp"
+    },
+    {
+      "id": "fedcba98-7654-3210-fedc-ba9876543210",
+      "name": "Personal"
+    }
+  ]
+}
+```
+
+Retry the request with the selected `customer_id`.
+
+## Authenticate with Code
+
+Exchange a verification code for a session token.
+
+```bash
+POST /v1/customer-portal/customer-session/authenticate
+```
+
+### Request Body
+
+<ParamField body="code" type="string" required>
+  The 6-digit verification code from the email.
+</ParamField>
+
+### Response
+
+<ResponseField name="token" type="string">
+  The session token to use in Authorization headers. Format: `polar_cst_...`
+</ResponseField>
+
+### Example
+
+```bash
+curl -X POST https://api.polar.sh/v1/customer-portal/customer-session/authenticate \
+  -H "Content-Type: application/json" \
+  -d '{"code": "ABC123"}'
+```
+
+**Response:**
+```json
+{
+  "token": "polar_cst_1a2b3c4d5e6f7g8h9i0j"
+}
+```
+
+### Error Response
+
+If the code is invalid or expired (codes expire after 15 minutes):
+
+```json
+{
+  "error": "invalid_or_expired_code",
+  "detail": "This customer session code is invalid or has expired."
+}
+```
+
+## Introspect Session
+
+Get information about the current session.
+
+```bash
+GET /v1/customer-portal/customer-session/introspect
+```
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token from authentication.
+</ParamField>
+
+### Response
+
+<ResponseField name="expires_at" type="string">
+  ISO 8601 timestamp when the session expires.
+</ResponseField>
+
+<ResponseField name="return_url" type="string">
+  Optional URL to redirect to after session expires.
+</ResponseField>
+
+### Example
+
+```bash
+curl https://api.polar.sh/v1/customer-portal/customer-session/introspect \
+  -H "Authorization: Bearer polar_cst_1a2b3c4d5e6f7g8h9i0j"
+```
+
+**Response:**
+```json
+{
+  "expires_at": "2024-12-31T23:59:59Z",
+  "return_url": "https://example.com/portal"
+}
+```
+
+## Get Authenticated User
+
+Retrieve details about the currently authenticated customer or member.
+
+```bash
+GET /v1/customer-portal/customer-session/user
+```
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token from authentication.
+</ParamField>
+
+### Response
+
+<ResponseField name="type" type="string">
+  Either `"customer"` or `"member"`.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The user's name.
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  The user's email address.
+</ResponseField>
+
+<ResponseField name="customer_id" type="string">
+  The associated customer ID (UUID).
+</ResponseField>
+
+<ResponseField name="member_id" type="string">
+  The member ID if type is "member" (UUID).
+</ResponseField>
+
+<ResponseField name="role" type="string">
+  The member's role if type is "member": `owner`, `billing_manager`, or `member`.
+</ResponseField>
+
+### Example
+
+```bash
+curl https://api.polar.sh/v1/customer-portal/customer-session/user \
+  -H "Authorization: Bearer polar_cst_1a2b3c4d5e6f7g8h9i0j"
+```
+
+**Customer Response:**
+```json
+{
+  "type": "customer",
+  "name": "Jane Smith",
+  "email": "jane@example.com",
+  "customer_id": "01234567-89ab-cdef-0123-456789abcdef",
+  "member_id": null,
+  "role": null
+}
+```
+
+**Member Response:**
+```json
+{
+  "type": "member",
+  "name": "John Doe",
+  "email": "john@acme.com",
+  "customer_id": "01234567-89ab-cdef-0123-456789abcdef",
+  "member_id": "fedcba98-7654-3210-fedc-ba9876543210",
+  "role": "billing_manager"
+}
+```
+
+## Session Lifecycle
+
+<Steps>
+  <Step title="Code Generation">
+    When a customer requests access, a 6-digit code is generated and emailed to them. The code is valid for 15 minutes.
+  </Step>
+  
+  <Step title="Authentication">
+    The customer enters the code to exchange it for a session token. Once used, the code is invalidated.
+  </Step>
+  
+  <Step title="Active Session">
+    The session token grants access to the Customer Portal API. Sessions are long-lived but can be revoked.
+  </Step>
+  
+  <Step title="Session Expiration">
+    When the session expires, customers must request a new code to regain access.
+  </Step>
+</Steps>
+
+## Security Best Practices
+
+<Warning>
+  Store session tokens securely. They grant full access to a customer's account.
+</Warning>
+
+- Never include session tokens in URLs or query parameters
+- Store tokens in httpOnly cookies or secure browser storage
+- Implement automatic logout after inactivity
+- Clear tokens when customers log out
+- Use HTTPS for all API requests
+
+## Development Mode
+
+In development environments, verification codes are logged to the console for easy testing:
+
+```
+╔══════════════════════════════════════════════════════════╗
+║                                                          ║
+║           🔑 CUSTOMER SESSION CODE: ABC123              ║
+║                                                          ║
+╚══════════════════════════════════════════════════════════╝
+```
+
+This makes it easy to test authentication flows without checking email.

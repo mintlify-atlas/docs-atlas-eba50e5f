@@ -1,0 +1,173 @@
+---
+title: Refunds
+description: Process customer refunds
+---
+
+## Overview
+
+Refunds allow you to return funds to customers for orders or subscriptions.
+
+## The Refund Object
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the refund
+</ResponseField>
+
+<ResponseField name="order_id" type="string" required>
+  ID of the order being refunded
+</ResponseField>
+
+<ResponseField name="subscription_id" type="string">
+  Associated subscription ID
+</ResponseField>
+
+<ResponseField name="customer_id" type="string" required>
+  ID of the customer
+</ResponseField>
+
+<ResponseField name="amount" type="integer" required>
+  Refund amount in cents
+</ResponseField>
+
+<ResponseField name="currency" type="string" required>
+  Three-letter ISO currency code
+</ResponseField>
+
+<ResponseField name="reason" type="string">
+  Reason for refund
+</ResponseField>
+
+<ResponseField name="comment" type="string">
+  Internal comment
+</ResponseField>
+
+<ResponseField name="succeeded" type="boolean" required>
+  Whether the refund succeeded
+</ResponseField>
+
+<ResponseField name="failure_reason" type="string">
+  Reason for failure (if applicable)
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  Creation timestamp
+</ResponseField>
+
+---
+
+## List Refunds
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/refunds" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Query Parameters
+
+<ParamField query="organization_id" type="string">
+  Filter by organization
+</ParamField>
+
+<ParamField query="order_id" type="string">
+  Filter by order
+</ParamField>
+
+<ParamField query="subscription_id" type="string">
+  Filter by subscription
+</ParamField>
+
+<ParamField query="customer_id" type="string">
+  Filter by customer
+</ParamField>
+
+<ParamField query="external_customer_id" type="string">
+  Filter by external customer ID
+</ParamField>
+
+<ParamField query="succeeded" type="boolean">
+  Filter by success status
+</ParamField>
+
+---
+
+## Create Refund
+
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/refunds" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "order_id": "order_123",
+    "amount": 2999,
+    "reason": "requested_by_customer"
+  }'
+```
+
+### Request Body
+
+<ParamField body="order_id" type="string" required>
+  Order ID to refund
+</ParamField>
+
+<ParamField body="amount" type="integer" required>
+  Amount to refund in cents
+</ParamField>
+
+<ParamField body="reason" type="enum">
+  Reason: `duplicate`, `fraudulent`, `requested_by_customer`, or `other`
+</ParamField>
+
+<ParamField body="comment" type="string">
+  Internal comment
+</ParamField>
+
+### Response
+
+<ResponseField name="201" type="Created">
+  Returns the created refund object
+</ResponseField>
+
+### Errors
+
+<ResponseField name="403" type="Forbidden">
+  Order is already fully refunded
+</ResponseField>
+
+---
+
+## Examples
+
+### Full Refund
+
+```bash
+curl -X POST "https://api.polar.sh/v1/refunds" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "order_id": "order_abc123",
+    "amount": 4999,
+    "reason": "requested_by_customer",
+    "comment": "Customer changed their mind"
+  }'
+```
+
+### Partial Refund
+
+```bash
+curl -X POST "https://api.polar.sh/v1/refunds" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "order_id": "order_abc123",
+    "amount": 1000,
+    "reason": "other",
+    "comment": "Partial refund for service issue"
+  }'
+```
+
+### List Customer Refunds
+
+```bash
+curl -X GET "https://api.polar.sh/v1/refunds?customer_id=cust_123" \
+  -H "Authorization: Bearer polar_pat_..."
+```

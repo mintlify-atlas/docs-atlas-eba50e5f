@@ -1,0 +1,436 @@
+---
+title: Customer Portal
+description: Self-service portal for customers to manage subscriptions, payments, and account settings
+---
+
+The customer portal provides a complete self-service experience where customers can manage their subscriptions, view orders, update payment methods, and access benefits without contacting support.
+
+## Overview
+
+The customer portal includes:
+- Subscription management (cancel, upgrade, change seats)
+- Order history and invoices
+- Payment method management
+- Benefit access and status
+- Usage-based billing metrics
+- Account settings
+
+<Note>
+The customer portal is fully hosted by Polar and customizable with your branding.
+</Note>
+
+## Accessing the Portal
+
+Customers access the portal via a unique URL:
+
+```
+https://polar.sh/{organization}/portal
+```
+
+### Authentication
+
+Customers authenticate using:
+
+1. **Magic Link**: Email-based passwordless login
+2. **Customer Session**: Automatically logged in after checkout
+3. **OAuth**: GitHub or other connected accounts
+
+```typescript Generate Portal Link
+const portalUrl = await polar.customerPortal.getUrl({
+  customerId: 'customer_xxx'
+});
+
+// Send link to customer via email
+```
+
+## Portal Sections
+
+### Overview
+
+The overview page displays:
+- Active subscriptions summary
+- Recent orders
+- Available benefits
+- Account balance and credits
+
+### Subscriptions
+
+Customers can:
+
+<CardGroup cols={2}>
+  <Card title="View Details" icon="eye">
+    See subscription status, billing cycle, and next charge date
+  </Card>
+  
+  <Card title="Cancel Subscription" icon="xmark">
+    Cancel at period end or immediately (with refund options)
+  </Card>
+  
+  <Card title="Change Seats" icon="users">
+    Add or remove seats for seat-based subscriptions
+  </Card>
+  
+  <Card title="Update Plan" icon="arrow-up">
+    Upgrade or downgrade between different product tiers
+  </Card>
+</CardGroup>
+
+#### Subscription Details View
+
+```json Subscription Information Shown
+{
+  "product": "Pro Plan",
+  "status": "active",
+  "amount": "$10/month",
+  "current_period_end": "2024-02-01",
+  "cancel_at_period_end": false,
+  "seats": 5,
+  "next_invoice_preview": {
+    "amount": 5000,
+    "date": "2024-02-01"
+  }
+}
+```
+
+### Orders
+
+View complete order history:
+- Order details and line items
+- Invoice download (PDF)
+- Receipt access
+- Refund status
+- Custom field data
+
+```typescript Download Invoice
+const invoice = await polar.orders.getInvoice({
+  id: 'order_xxx'
+});
+// Returns PDF download URL
+```
+
+### Seats (Team Customers)
+
+For team customers with seat-based subscriptions:
+
+<Steps>
+  <Step title="View Assigned Seats">
+    See all assigned seats with status (pending, claimed, revoked).
+  </Step>
+  
+  <Step title="Assign New Seats">
+    Invite team members by email:
+    ```typescript
+    await polar.customerSeats.assign({
+      subscriptionId: 'sub_xxx',
+      email: 'member@example.com'
+    });
+    ```
+  </Step>
+  
+  <Step title="Revoke Access">
+    Remove team members and free up seats:
+    ```typescript
+    await polar.customerSeats.revoke({
+      id: 'seat_xxx'
+    });
+    ```
+  </Step>
+  
+  <Step title="Change Total Seats">
+    Increase or decrease total seat count (with proration).
+  </Step>
+</Steps>
+
+### Usage
+
+For usage-based billing, customers can:
+- View current usage by meter
+- See usage limits and overages
+- Track historical usage trends
+- Monitor credit balance
+
+```json Usage Display
+{
+  "meter": "API Requests",
+  "usage": 15000,
+  "limit": 100000,
+  "period": "Current billing cycle",
+  "percentage": 15
+}
+```
+
+### Wallet
+
+Customer wallet management:
+- View current balance
+- See credit history
+- Track promotional credits
+- Monitor usage credits
+
+<Note>
+Credits are automatically applied to invoices at renewal.
+</Note>
+
+### Settings
+
+Customers can update:
+
+#### Payment Methods
+
+- Add new payment methods
+- Update default payment method
+- Remove old payment methods
+- View payment history
+
+```typescript Update Payment Method
+await polar.customers.updatePaymentMethod({
+  customerId: 'customer_xxx',
+  paymentMethodId: 'pm_xxx'
+});
+```
+
+#### Billing Information
+
+- Update billing address
+- Add/update tax ID
+- Change billing email
+- Update company name
+
+#### Account Details
+
+- Update email address
+- Change name
+- Manage connected accounts (OAuth)
+- View customer ID and external ID
+
+## Subscription Cancellation
+
+Customers can cancel subscriptions directly:
+
+<Steps>
+  <Step title="Choose Cancellation Type">
+    - **At Period End**: Access continues until end of billing cycle
+    - **Immediately**: Access ends now (with prorated refund option)
+  </Step>
+  
+  <Step title="Provide Reason">
+    Optional feedback on why they're canceling:
+    - Too expensive
+    - Missing features
+    - No longer needed
+    - Switching to competitor
+    - Other (custom reason)
+  </Step>
+  
+  <Step title="Confirm Cancellation">
+    Review what will happen and confirm.
+  </Step>
+</Steps>
+
+### Cancellation Reasons
+
+```json Customer Cancellation
+{
+  "subscription_id": "sub_xxx",
+  "cancel_at_period_end": true,
+  "cancellation_reason": "too_expensive",
+  "cancellation_comment": "Moving to annual plan instead"
+}
+```
+
+<Note>
+Cancellation reasons help you understand churn and improve your product.
+</Note>
+
+## Benefit Access
+
+The portal displays all active benefits:
+
+- **License Keys**: Display and copy keys
+- **Discord Invites**: One-click join links
+- **File Downloads**: Direct download access
+- **API Keys**: View and regenerate keys
+- **Custom Benefits**: Links and instructions
+
+```json Benefit Display
+{
+  "benefit_type": "license_key",
+  "description": "Pro License Key",
+  "key": "XXXX-XXXX-XXXX-XXXX",
+  "granted_at": "2024-01-01T00:00:00Z",
+  "expires_at": null
+}
+```
+
+## Customization
+
+Customize the portal to match your brand:
+
+### Branding
+
+- Organization logo
+- Brand colors (inherited from organization settings)
+- Custom domain (coming soon)
+- Email templates
+
+### Content
+
+- Welcome message
+- Support links
+- Terms of service link
+- Privacy policy link
+
+### Navigation
+
+Control which sections are visible:
+
+```json Portal Configuration
+{
+  "sections": {
+    "subscriptions": true,
+    "orders": true,
+    "usage": true,
+    "wallet": false,  // Hide if not using credits
+    "seats": true
+  }
+}
+```
+
+## Magic Link Authentication
+
+Customers authenticate via email:
+
+<Steps>
+  <Step title="Enter Email">
+    Customer enters their email on the portal login page.
+  </Step>
+  
+  <Step title="Receive Link">
+    Polar sends a magic link email (expires in 15 minutes).
+  </Step>
+  
+  <Step title="Click Link">
+    Customer clicks the link and is logged into the portal.
+  </Step>
+  
+  <Step title="Session Created">
+    A secure session is created (expires after 30 days of inactivity).
+  </Step>
+</Steps>
+
+<Note>
+Magic links are single-use and expire after 15 minutes for security.
+</Note>
+
+## Embedding Portal Components
+
+Embed portal components in your app:
+
+```typescript
+import { PolarCustomerPortal } from '@polar-sh/sdk/react';
+
+<PolarCustomerPortal
+  customerId="customer_xxx"
+  view="subscriptions"  // Specific section
+/>
+```
+
+Available views:
+- `overview`
+- `subscriptions`
+- `orders`
+- `usage`
+- `wallet`
+- `settings`
+
+## Mobile Experience
+
+The customer portal is fully responsive:
+- Mobile-optimized layouts
+- Touch-friendly controls
+- Simplified navigation
+- Progressive web app (PWA) support
+
+## Security
+
+Portal security features:
+
+<CardGroup cols={2}>
+  <Card title="Session Management" icon="lock">
+    Secure session tokens with automatic expiration
+  </Card>
+  
+  <Card title="Email Verification" icon="envelope-circle-check">
+    Magic links verify customer email ownership
+  </Card>
+  
+  <Card title="Rate Limiting" icon="shield">
+    Protection against brute force and abuse
+  </Card>
+  
+  <Card title="HTTPS Only" icon="shield-check">
+    All traffic encrypted with TLS 1.3
+  </Card>
+</CardGroup>
+
+## Analytics
+
+Track portal usage:
+- Login frequency
+- Most viewed sections
+- Self-service actions (cancellations, upgrades)
+- Time to resolution
+
+<Note>
+Portal analytics help identify friction points and improve self-service experience.
+</Note>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Share Portal Link" icon="share">
+    Include portal link in order confirmation emails
+  </Card>
+  
+  <Card title="Encourage Self-Service" icon="users-gear">
+    Direct support questions to portal for common tasks
+  </Card>
+  
+  <Card title="Keep Branding Consistent" icon="palette">
+    Match portal design to your main application
+  </Card>
+  
+  <Card title="Monitor Usage" icon="chart-line">
+    Track which features customers use most
+  </Card>
+</CardGroup>
+
+## Webhooks
+
+Portal actions trigger webhooks:
+
+- `subscription.canceled`: Customer canceled via portal
+- `subscription.updated`: Customer changed subscription
+- `customer.updated`: Customer updated profile
+- `customer_seat.assigned`: Team member invited
+
+```json Portal Action Webhook
+{
+  "type": "subscription.canceled",
+  "data": {
+    "id": "sub_xxx",
+    "canceled_at": "2024-01-15T10:30:00Z",
+    "cancellation_reason": "too_expensive",
+    "cancel_at_period_end": true
+  }
+}
+```
+
+## API Reference
+
+See the full API documentation:
+
+- [Get Portal URL](/api-reference/customer-portal/url)
+- [Customer Sessions](/api-reference/customer-sessions/create)
+- [List Orders](/api-reference/orders/list)
+- [Update Customer](/api-reference/customers/update)

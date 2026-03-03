@@ -1,0 +1,299 @@
+---
+title: "Authentication"
+description: "API authentication methods for Polar"
+icon: "key"
+---
+
+Polar API supports multiple authentication methods depending on your use case. All API requests must be authenticated using one of the methods below.
+
+## API Base URL
+
+All API requests should be made to:
+
+```
+https://api.polar.sh
+```
+
+## Authentication Methods
+
+### Personal Access Token (PAT)
+
+Personal Access Tokens are ideal for server-side applications and scripts that need to access your personal resources.
+
+<Steps>
+  <Step title="Generate a token">
+    Navigate to your [Polar settings](https://polar.sh/settings) and create a new Personal Access Token.
+  </Step>
+  <Step title="Use the token">
+    Include the token in the `Authorization` header of your API requests.
+  </Step>
+</Steps>
+
+<CodeGroup>
+```bash curl
+curl https://api.polar.sh/v1/customers \
+  -H "Authorization: Bearer polar_pat_YOUR_TOKEN_HERE"
+```
+
+```typescript TypeScript
+import { Polar } from "@polar-sh/sdk";
+
+const polar = new Polar({
+  accessToken: process.env.POLAR_ACCESS_TOKEN,
+});
+
+const customers = await polar.customers.list();
+```
+
+```python Python
+from polar_sdk import Polar
+
+polar = Polar(
+    access_token="polar_pat_YOUR_TOKEN_HERE"
+)
+
+customers = polar.customers.list()
+```
+
+```php PHP
+use Polar\Polar;
+
+$polar = Polar::make(
+    accessToken: 'polar_pat_YOUR_TOKEN_HERE'
+);
+
+$customers = $polar->customers->list();
+```
+
+```go Go
+import (
+    polar "github.com/polarsource/polar-go"
+)
+
+client := polar.NewClient(
+    polar.WithAccessToken("polar_pat_YOUR_TOKEN_HERE"),
+)
+
+customers, err := client.Customers.List(ctx)
+```
+</CodeGroup>
+
+<Note>
+Personal Access Tokens have access to all resources in your personal account. Keep them secure and never commit them to version control.
+</Note>
+
+### Organization Access Token (OAT)
+
+Organization Access Tokens are scoped to a specific organization and can have granular permissions.
+
+<Steps>
+  <Step title="Generate a token">
+    Go to your organization settings and create a new Organization Access Token with the required scopes.
+  </Step>
+  <Step title="Configure scopes">
+    Select only the scopes needed for your application:
+    - `products:read`, `products:write` - Product management
+    - `customers:read`, `customers:write` - Customer management
+    - `subscriptions:read`, `subscriptions:write` - Subscription management
+    - `orders:read`, `orders:write` - Order management
+    - `webhooks:read`, `webhooks:write` - Webhook management
+    - And many more...
+  </Step>
+  <Step title="Use the token">
+    Include the token in the `Authorization` header.
+  </Step>
+</Steps>
+
+<CodeGroup>
+```bash curl
+curl https://api.polar.sh/v1/customers \
+  -H "Authorization: Bearer polar_oat_YOUR_TOKEN_HERE"
+```
+
+```typescript TypeScript
+const polar = new Polar({
+  accessToken: process.env.POLAR_ORG_ACCESS_TOKEN,
+});
+```
+
+```python Python
+polar = Polar(
+    access_token="polar_oat_YOUR_TOKEN_HERE"
+)
+```
+</CodeGroup>
+
+<Tip>
+Organization Access Tokens are recommended for production applications as they provide better security through scoped permissions.
+</Tip>
+
+### OAuth 2.0
+
+OAuth 2.0 is ideal for applications that need to access Polar resources on behalf of users.
+
+<Steps>
+  <Step title="Register your application">
+    Create an OAuth 2.0 client in your Polar dashboard.
+  </Step>
+  <Step title="Request authorization">
+    Redirect users to the authorization endpoint with your client ID and requested scopes.
+  </Step>
+  <Step title="Exchange code for token">
+    After user approval, exchange the authorization code for an access token.
+  </Step>
+  <Step title="Make API requests">
+    Use the access token to make authenticated requests on behalf of the user.
+  </Step>
+</Steps>
+
+<CodeGroup>
+```bash Authorization Request
+# Redirect user to:
+https://api.polar.sh/v1/oauth2/authorize?
+  client_id=YOUR_CLIENT_ID&
+  response_type=code&
+  redirect_uri=https://your-app.com/callback&
+  scope=openid%20profile%20email%20products:read%20customers:read
+```
+
+```bash Token Exchange
+curl -X POST https://api.polar.sh/v1/oauth2/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=authorization_code" \
+  -d "code=AUTHORIZATION_CODE" \
+  -d "client_id=YOUR_CLIENT_ID" \
+  -d "client_secret=YOUR_CLIENT_SECRET" \
+  -d "redirect_uri=https://your-app.com/callback"
+```
+
+```bash Using Access Token
+curl https://api.polar.sh/v1/customers \
+  -H "Authorization: Bearer ACCESS_TOKEN"
+```
+</CodeGroup>
+
+<Note>
+For detailed OAuth 2.0 implementation guidance, see our [OAuth 2.0 documentation](/integrate/oauth2/introduction).
+</Note>
+
+### Customer Session Tokens
+
+Customer session tokens are specialized tokens for authenticating customers on your organization. These are created programmatically for customer-facing features.
+
+<CodeGroup>
+```bash Create Customer Session
+curl -X POST https://api.polar.sh/v1/customer-portal/sessions/create \
+  -H "Authorization: Bearer YOUR_ORG_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_id": "CUSTOMER_ID"
+  }'
+```
+
+```bash Use Customer Session Token
+curl https://api.polar.sh/v1/customer-portal/subscriptions \
+  -H "Authorization: Bearer CUSTOMER_SESSION_TOKEN"
+```
+</CodeGroup>
+
+<Note>
+Customer session tokens expire after 1 hour and are intended for short-lived customer portal sessions.
+</Note>
+
+## Available Scopes
+
+When using OAuth 2.0 or Organization Access Tokens, you can request specific scopes:
+
+<AccordionGroup>
+  <Accordion title="Identity Scopes">
+    - `openid` - OpenID Connect authentication
+    - `profile` - Read user profile
+    - `email` - Read user email address
+  </Accordion>
+
+  <Accordion title="Resource Scopes">
+    Each resource has read and write scopes:
+    - `organizations:read`, `organizations:write`
+    - `products:read`, `products:write`
+    - `customers:read`, `customers:write`
+    - `subscriptions:read`, `subscriptions:write`
+    - `orders:read`, `orders:write`
+    - `benefits:read`, `benefits:write`
+    - `discounts:read`, `discounts:write`
+    - `webhooks:read`, `webhooks:write`
+    - `events:read`, `events:write`
+    - `meters:read`, `meters:write`
+    - `files:read`, `files:write`
+    - `license_keys:read`, `license_keys:write`
+    - `checkouts:read`, `checkouts:write`
+    - `checkout_links:read`, `checkout_links:write`
+    - `custom_fields:read`, `custom_fields:write`
+    - `refunds:read`, `refunds:write`
+    - `payments:read`
+    - `transactions:read`, `transactions:write`
+    - `payouts:read`, `payouts:write`
+    - `disputes:read`
+    - `metrics:read`
+  </Accordion>
+
+  <Accordion title="Portal Scopes">
+    - `customer_portal:read`, `customer_portal:write` - Customer portal access
+    - `customer_sessions:write` - Create customer sessions
+  </Accordion>
+</AccordionGroup>
+
+## Rate Limiting
+
+API requests are rate limited based on your authentication method:
+
+- **Web sessions**: Higher limits for dashboard usage
+- **OAuth 2.0 clients**: Per-client rate limiting
+- **Organization tokens**: Based on organization's rate limit tier
+- **Personal tokens**: Default rate limiting
+
+<Warning>
+Rate limit headers are included in all API responses:
+- `X-RateLimit-Limit` - Request limit per window
+- `X-RateLimit-Remaining` - Remaining requests
+- `X-RateLimit-Reset` - Unix timestamp when the limit resets
+</Warning>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Secure Storage" icon="lock">
+    Store tokens securely using environment variables or a secrets management service. Never hardcode them in your application.
+  </Card>
+
+  <Card title="Principle of Least Privilege" icon="shield">
+    Request only the scopes your application needs. Use Organization Access Tokens with minimal permissions.
+  </Card>
+
+  <Card title="Token Rotation" icon="rotate">
+    Regularly rotate your tokens and implement token refresh for OAuth 2.0 applications.
+  </Card>
+
+  <Card title="Error Handling" icon="triangle-exclamation">
+    Handle authentication errors gracefully and implement retry logic with exponential backoff.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Sandbox Environment" icon="flask" href="/integrate/sandbox">
+    Test your integration in the sandbox environment
+  </Card>
+
+  <Card title="Customer State API" icon="users" href="/integrate/customer-state">
+    Learn how to check customer entitlements
+  </Card>
+
+  <Card title="Webhooks" icon="webhook" href="/integrate/webhooks/endpoints">
+    Set up webhooks for real-time notifications
+  </Card>
+
+  <Card title="API Reference" icon="code" href="/api-reference/introduction">
+    Explore the complete API documentation
+  </Card>
+</CardGroup>

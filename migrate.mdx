@@ -1,0 +1,903 @@
+---
+title: "Migrate to Polar"
+description: "Comprehensive guide for migrating from other payment platforms to Polar"
+---
+
+## Why migrate to Polar?
+
+Polar offers several advantages over traditional payment platforms:
+
+<CardGroup cols={2}>
+  <Card title="Developer-First" icon="code">
+    Built by developers, for developers. Clean REST API, type-safe SDKs, and comprehensive documentation.
+  </Card>
+  <Card title="Open Source" icon="github">
+    Fully open source with Apache 2.0 license. Transparent pricing, no vendor lock-in, and community-driven development.
+  </Card>
+  <Card title="All-in-One" icon="layer-group">
+    Payments, subscriptions, benefits, usage billing, and customer portal in one platform.
+  </Card>
+  <Card title="Lower Fees" icon="dollar-sign">
+    Simple 4% + 40¢ per transaction. No monthly fees, no setup costs, no surprises.
+  </Card>
+</CardGroup>
+
+## Migration overview
+
+Migrating to Polar involves four main phases:
+
+<Steps>
+  <Step title="Data mapping">
+    Understand how your existing data maps to Polar's data model
+  </Step>
+  <Step title="Setup & configuration">
+    Create your Polar account, connect Stripe, and configure products
+  </Step>
+  <Step title="Customer & subscription migration">
+    Import existing customers and transition active subscriptions
+  </Step>
+  <Step title="Integration & cutover">
+    Update your application code and switch to Polar
+  </Step>
+</Steps>
+
+<Note>
+  **Timeline**: Most migrations complete in 1-2 weeks depending on complexity. For large customer bases (10,000+ subscribers), plan for 2-4 weeks.
+</Note>
+
+## Platform-specific guides
+
+<Tabs>
+  <Tab title="Stripe Billing">
+    ### Migrating from Stripe Billing
+    
+    Polar uses Stripe for payment processing, making migration smoother. You can keep your existing Stripe account.
+    
+    #### Data mapping
+    
+    | Stripe Billing | Polar Equivalent |
+    |----------------|------------------|
+    | Product | Product |
+    | Price | Product Price |
+    | Customer | Customer |
+    | Subscription | Subscription |
+    | Invoice | Order (for subscription) |
+    | Charge | Order (one-time) |
+    | Coupon | Discount |
+    
+    #### Migration steps
+    
+    <Steps>
+      <Step title="Export Stripe data">
+        Use Stripe's API to export your data:
+        
+        ```typescript
+        import Stripe from "stripe";
+        
+        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+        
+        // Export products
+        const products = await stripe.products.list({ limit: 100 });
+        
+        // Export customers
+        const customers = await stripe.customers.list({ limit: 100 });
+        
+        // Export subscriptions
+        const subscriptions = await stripe.subscriptions.list({ limit: 100 });
+        ```
+        
+        <Tip>
+          For large datasets, use pagination and save exports to CSV for easier review.
+        </Tip>
+      </Step>
+      
+      <Step title="Create products in Polar">
+        Recreate your Stripe products in Polar:
+        
+        ```typescript
+        import { Polar } from "@polar-sh/sdk";
+        
+        const polar = new Polar({
+          accessToken: process.env.POLAR_ACCESS_TOKEN,
+        });
+        
+        for (const stripeProduct of products.data) {
+          // Get prices for this product
+          const prices = await stripe.prices.list({ 
+            product: stripeProduct.id 
+          });
+          
+          await polar.products.create({
+            name: stripeProduct.name,
+            description: stripeProduct.description,
+            prices: prices.data.map(price => ({
+              amountType: "fixed",
+              priceAmount: price.unit_amount,
+              priceCurrency: price.currency.toUpperCase(),
+              recurringInterval: price.recurring?.interval,
+            })),
+          });
+        }
+        ```
+      </Step>
+      
+      <Step title="Connect same Stripe account">
+        In Polar:
+        
+        1. Go to **Settings** → **Finance** → **Accounts**
+        2. Click **Connect Stripe**
+        3. Use the **same Stripe account** you're currently using
+        
+        This allows Polar to access existing customer payment methods.
+        
+        <Warning>
+          Using the same Stripe account is crucial for seamless subscription migration.
+        </Warning>
+      </Step>
+      
+      <Step title="Import customers">
+        Polar can automatically sync customers from your Stripe account:
+        
+        ```typescript
+        // Customers with existing Stripe IDs are automatically linked
+        const checkout = await polar.checkouts.create({
+          productPriceId: "prp_...",
+          customerEmail: "customer@example.com",
+          // Polar will match by email or create new customer
+        });
+        ```
+        
+        For bulk imports, use the API:
+        
+        ```typescript
+        for (const stripeCustomer of customers.data) {
+          // Polar will link to existing Stripe customer
+          await polar.customers.create({
+            email: stripeCustomer.email,
+            name: stripeCustomer.name,
+            // Additional metadata
+          });
+        }
+        ```
+      </Step>
+      
+      <Step title="Transition subscriptions">
+        **Option 1: Natural renewal (recommended)**
+        
+        Wait for subscriptions to renew naturally:
+        - Keep Stripe Billing running
+        - New purchases go through Polar
+        - Existing subscriptions renew through Polar at next billing date
+        - Cancel Stripe Billing once all migrated
+        
+        **Option 2: Immediate migration**
+        
+        Cancel and recreate subscriptions (may cause customer disruption):
+        
+        ```typescript
+        for (const stripeSub of subscriptions.data) {
+          // Cancel in Stripe (optionally at period end)
+          await stripe.subscriptions.cancel(stripeSub.id);
+          
+          // Create in Polar with same billing date
+          await polar.subscriptions.create({
+            customerId: polarCustomer.id,
+            productPriceId: polarPrice.id,
+            // Prorate or start immediately
+          });
+          
+          // Notify customer of the change
+        }
+        ```
+        
+        <Warning>
+          Immediate migration may confuse customers. We recommend natural renewal whenever possible.
+        </Warning>
+      </Step>
+    </Steps>
+    
+    #### Keep using Stripe webhooks
+    
+    You can continue using Stripe webhooks during transition:
+    
+    ```typescript
+    // Handle both Stripe and Polar webhooks
+    if (webhookSource === "stripe") {
+      // Legacy Stripe subscription
+      handleStripeEvent(event);
+    } else if (webhookSource === "polar") {
+      // New Polar subscription
+      handlePolarEvent(event);
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Paddle">
+    ### Migrating from Paddle
+    
+    Paddle and Polar both act as merchant of record, making the transition conceptually similar.
+    
+    #### Data mapping
+    
+    | Paddle | Polar Equivalent |
+    |--------|------------------|
+    | Product | Product |
+    | Price | Product Price |
+    | Customer | Customer |
+    | Subscription | Subscription |
+    | Transaction | Order |
+    | Discount | Discount |
+    
+    #### Migration steps
+    
+    <Steps>
+      <Step title="Export Paddle data">
+        Use Paddle's API to export:
+        
+        ```typescript
+        import { Paddle } from "@paddle/paddle-node-sdk";
+        
+        const paddle = new Paddle(process.env.PADDLE_API_KEY);
+        
+        // Export products
+        const products = await paddle.products.list();
+        
+        // Export subscriptions
+        const subscriptions = await paddle.subscriptions.list();
+        ```
+      </Step>
+      
+      <Step title="Set up Polar & Stripe">
+        Since Polar uses Stripe for processing:
+        
+        1. Create Polar account
+        2. Connect a new or existing Stripe account
+        3. Complete Stripe onboarding
+        
+        <Note>
+          You'll need to migrate payment methods since Paddle stores them separately.
+        </Note>
+      </Step>
+      
+      <Step title="Recreate products">
+        Map your Paddle products to Polar:
+        
+        ```typescript
+        const polar = new Polar({
+          accessToken: process.env.POLAR_ACCESS_TOKEN,
+        });
+        
+        for (const paddleProduct of products) {
+          await polar.products.create({
+            name: paddleProduct.name,
+            description: paddleProduct.description,
+            prices: paddleProduct.prices.map(price => ({
+              amountType: "fixed",
+              priceAmount: price.unitPrice.amount,
+              priceCurrency: price.unitPrice.currency,
+              recurringInterval: price.billingCycle?.interval,
+            })),
+          });
+        }
+        ```
+      </Step>
+      
+      <Step title="Customer migration">
+        Import customers and let them update payment methods:
+        
+        ```typescript
+        for (const paddleCustomer of customers) {
+          const customer = await polar.customers.create({
+            email: paddleCustomer.email,
+            name: paddleCustomer.name,
+          });
+          
+          // Send email asking to update payment method
+          await sendPaymentMethodUpdateEmail(customer.email, {
+            updateUrl: `https://polar.sh/customer-portal?email=${customer.email}`,
+          });
+        }
+        ```
+        
+        Customers can add new payment methods via the [customer portal](https://polar.sh/customer-portal).
+      </Step>
+      
+      <Step title="Subscription transition">
+        Since payment methods must migrate, use a phased approach:
+        
+        1. **Announce the migration** 30 days in advance
+        2. **Keep Paddle active** until all customers migrate
+        3. **Send migration emails** with customer portal links
+        4. **Create Polar subscriptions** when customers update payment methods
+        5. **Cancel Paddle subscriptions** after successful migration
+        
+        Example email flow:
+        
+        ```typescript
+        // Week 1: Announcement
+        await sendEmail({
+          subject: "Important: Updating our billing system",
+          body: "We're migrating to improved billing infrastructure...",
+        });
+        
+        // Week 2-3: Individual reminders
+        for (const customer of unmigrated) {
+          await sendMigrationReminder(customer);
+        }
+        
+        // Week 4: Final push
+        await sendFinalReminder(unmigrated);
+        ```
+      </Step>
+    </Steps>
+    
+    #### Key differences
+    
+    | Feature | Paddle | Polar |
+    |---------|--------|-------|
+    | Payment processor | Built-in | Stripe |
+    | Tax handling | Automatic | Automatic (via Stripe) |
+    | Payouts | Weekly | Daily (Stripe) |
+    | Fee structure | 5% + 50¢ | 4% + 40¢ + Stripe fees |
+    | Customer portal | Built-in | Built-in |
+  </Tab>
+  
+  <Tab title="Lemon Squeezy">
+    ### Migrating from Lemon Squeezy
+    
+    Both platforms focus on digital products and developer experience.
+    
+    #### Data mapping
+    
+    | Lemon Squeezy | Polar Equivalent |
+    |---------------|------------------|
+    | Product | Product |
+    | Variant | Product Price |
+    | Customer | Customer |
+    | Subscription | Subscription |
+    | Order | Order |
+    | Discount Code | Discount |
+    
+    #### Migration steps
+    
+    <Steps>
+      <Step title="Export from Lemon Squeezy">
+        Use the Lemon Squeezy API:
+        
+        ```typescript
+        const LEMON_API = "https://api.lemonsqueezy.com/v1";
+        
+        // Export products
+        const products = await fetch(`${LEMON_API}/products`, {
+          headers: { Authorization: `Bearer ${LEMON_API_KEY}` },
+        }).then(r => r.json());
+        
+        // Export subscriptions
+        const subscriptions = await fetch(`${LEMON_API}/subscriptions`, {
+          headers: { Authorization: `Bearer ${LEMON_API_KEY}` },
+        }).then(r => r.json());
+        ```
+      </Step>
+      
+      <Step title="Set up Polar">
+        1. Create Polar account
+        2. Connect Stripe (Polar uses Stripe for processing)
+        3. Complete merchant onboarding
+        
+        <Tip>
+          Polar's open source nature means you can self-host if needed.
+        </Tip>
+      </Step>
+      
+      <Step title="Create products">
+        Import your products:
+        
+        ```typescript
+        const polar = new Polar({
+          accessToken: process.env.POLAR_ACCESS_TOKEN,
+        });
+        
+        for (const product of products.data) {
+          await polar.products.create({
+            name: product.attributes.name,
+            description: product.attributes.description,
+            prices: product.attributes.variants.map(variant => ({
+              amountType: "fixed",
+              priceAmount: variant.price,
+              priceCurrency: "USD",
+              recurringInterval: variant.interval,
+            })),
+          });
+        }
+        ```
+      </Step>
+      
+      <Step title="Customer & payment migration">
+        Customers need to add new payment methods:
+        
+        ```typescript
+        // Import customers
+        for (const lsCustomer of customers.data) {
+          await polar.customers.create({
+            email: lsCustomer.attributes.email,
+            name: lsCustomer.attributes.name,
+          });
+        }
+        
+        // Send migration instructions
+        await sendMigrationEmail({
+          instructions: "Update your payment method",
+          portalUrl: "https://polar.sh/customer-portal",
+        });
+        ```
+      </Step>
+      
+      <Step title="Subscription migration">
+        Use a customer-driven approach:
+        
+        1. Keep Lemon Squeezy active during transition
+        2. Customers update payment methods in Polar
+        3. Create Polar subscription when payment method added
+        4. Cancel Lemon Squeezy subscription
+        5. Grant any existing benefits in Polar
+        
+        ```typescript
+        // When customer updates payment method
+        async function migrateCustomerSubscription(customerId: string) {
+          // Get Lemon Squeezy subscription
+          const lsSub = await getLSSubscription(customerId);
+          
+          // Create Polar subscription
+          const polarSub = await polar.subscriptions.create({
+            customerId: customerId,
+            productPriceId: mappedPriceId,
+            // Start at next billing date to avoid double charging
+          });
+          
+          // Cancel LS subscription
+          await cancelLSSubscription(lsSub.id);
+          
+          return polarSub;
+        }
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="Other Platforms">
+    ### Migrating from other platforms
+    
+    General migration guide for any payment platform:
+    
+    #### Step 1: Understand your data
+    
+    Export and document:
+    - Active products and prices
+    - Customer list with emails
+    - Active subscriptions with billing dates
+    - Order/transaction history
+    - Any custom metadata
+    
+    #### Step 2: Map to Polar's model
+    
+    | Your Platform | Polar Equivalent | Notes |
+    |---------------|------------------|-------|
+    | Product/Item | Product | What you sell |
+    | Price/SKU | Product Price | Pricing model |
+    | User/Customer | Customer | Who buys |
+    | Subscription | Subscription | Recurring billing |
+    | Purchase | Order | Completed transaction |
+    | Coupon/Promo | Discount | Price reductions |
+    
+    #### Step 3: Setup Polar
+    
+    <Steps>
+      <Step title="Account creation">
+        1. Sign up at [polar.sh](https://polar.sh)
+        2. Create your organization
+        3. Connect Stripe account
+      </Step>
+      
+      <Step title="Product setup">
+        ```typescript
+        const polar = new Polar({
+          accessToken: process.env.POLAR_ACCESS_TOKEN,
+        });
+        
+        // Create each product
+        await polar.products.create({
+          name: "Your Product",
+          description: "Product description",
+          prices: [{
+            amountType: "fixed",
+            priceAmount: 2900,
+            priceCurrency: "USD",
+            recurringInterval: "month",
+          }],
+        });
+        ```
+      </Step>
+      
+      <Step title="Webhook configuration">
+        Set up webhooks to receive events:
+        
+        1. Go to **Settings** → **Webhooks**
+        2. Add endpoint URL
+        3. Select events to receive
+        4. Test with sandbox checkouts
+        
+        [View webhook guide →](/integrate/webhooks/endpoints)
+      </Step>
+    </Steps>
+    
+    #### Step 4: Customer migration
+    
+    Choose your migration strategy:
+    
+    **A) Gradual (Recommended)**
+    - Keep old system active
+    - New purchases use Polar
+    - Existing subscriptions renew on Polar
+    - Natural transition over billing cycles
+    
+    **B) Bulk migration**
+    - Set migration date
+    - Notify all customers in advance
+    - Import all data on migration date
+    - Require payment method updates
+    - Higher risk but faster completion
+    
+    #### Step 5: Code integration
+    
+    Update your application:
+    
+    ```typescript
+    // Old system
+    const checkout = await oldProvider.createCheckout(...);
+    
+    // New Polar integration
+    const checkout = await polar.checkouts.create({
+      productPriceId: "prp_...",
+      successUrl: "https://yoursite.com/success",
+      customerEmail: user.email,
+    });
+    
+    // Redirect to checkout.url
+    ```
+    
+    Update webhook handlers:
+    
+    ```typescript
+    // POST /webhooks/polar
+    export async function POST(req: Request) {
+      const event = await req.json();
+      
+      switch (event.type) {
+        case "checkout.completed":
+          await handleCheckoutCompleted(event.data);
+          break;
+        case "subscription.updated":
+          await handleSubscriptionUpdated(event.data);
+          break;
+      }
+      
+      return new Response("OK");
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Migration checklist
+
+Use this checklist to track your migration progress:
+
+<Steps>
+  <Step title="Planning">
+    <AccordionGroup>
+      <Accordion title="Pre-migration tasks">
+        - [ ] Export all data from current platform
+        - [ ] Document current products and pricing
+        - [ ] List all active subscriptions
+        - [ ] Review integration points in your app
+        - [ ] Create migration timeline
+        - [ ] Draft customer communication plan
+      </Accordion>
+    </AccordionGroup>
+  </Step>
+  
+  <Step title="Setup">
+    <AccordionGroup>
+      <Accordion title="Polar configuration">
+        - [ ] Create Polar account
+        - [ ] Connect Stripe account
+        - [ ] Complete merchant onboarding
+        - [ ] Set up organization profile
+        - [ ] Create API access tokens
+        - [ ] Configure webhook endpoints
+      </Accordion>
+    </AccordionGroup>
+  </Step>
+  
+  <Step title="Product migration">
+    <AccordionGroup>
+      <Accordion title="Product setup">
+        - [ ] Create all products in Polar
+        - [ ] Configure pricing models
+        - [ ] Add product descriptions and media
+        - [ ] Set up benefits (if applicable)
+        - [ ] Create discount codes
+        - [ ] Test checkout flows
+      </Accordion>
+    </AccordionGroup>
+  </Step>
+  
+  <Step title="Customer migration">
+    <AccordionGroup>
+      <Accordion title="Customer transition">
+        - [ ] Import customer data
+        - [ ] Send migration announcement
+        - [ ] Provide payment method update instructions
+        - [ ] Handle customer support questions
+        - [ ] Transition active subscriptions
+        - [ ] Verify benefit grants
+      </Accordion>
+    </AccordionGroup>
+  </Step>
+  
+  <Step title="Integration">
+    <AccordionGroup>
+      <Accordion title="Code updates">
+        - [ ] Update checkout creation code
+        - [ ] Implement Polar webhook handlers
+        - [ ] Update subscription management UI
+        - [ ] Add customer portal links
+        - [ ] Test complete purchase flow
+        - [ ] Test subscription renewal
+        - [ ] Test webhook events
+      </Accordion>
+    </AccordionGroup>
+  </Step>
+  
+  <Step title="Go live">
+    <AccordionGroup>
+      <Accordion title="Launch tasks">
+        - [ ] Switch to production mode
+        - [ ] Update payment links across marketing
+        - [ ] Monitor first transactions
+        - [ ] Verify webhook delivery
+        - [ ] Check customer communications
+        - [ ] Decommission old platform (gradual)
+      </Accordion>
+    </AccordionGroup>
+  </Step>
+</Steps>
+
+## Common challenges
+
+<AccordionGroup>
+  <Accordion title="Payment method migration">
+    **Challenge**: Customers need to re-enter payment details
+    
+    **Solutions**:
+    - Use same Stripe account (if migrating from Stripe)
+    - Send clear instructions with customer portal links
+    - Offer incentives (discount) for early migration
+    - Provide grace period for payment method updates
+    - Support team ready for questions
+    
+    ```typescript
+    // Example: Offer migration discount
+    await polar.discounts.create({
+      code: "MIGRATE2024",
+      type: "percentage",
+      amount: 20, // 20% off
+      duration: "once",
+      redemptionLimit: 1, // One per customer
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Subscription timing">
+    **Challenge**: Avoiding double charges during migration
+    
+    **Solutions**:
+    - Start Polar subscriptions at next billing date
+    - Prorate partial periods
+    - Cancel old subscription after new one activates
+    - Monitor for duplicate charges
+    
+    ```typescript
+    // Align with existing billing date
+    await polar.subscriptions.create({
+      customerId: customer.id,
+      productPriceId: price.id,
+      startedAt: oldSubscription.currentPeriodEnd,
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Historical data">
+    **Challenge**: Preserving transaction history and analytics
+    
+    **Solutions**:
+    - Export complete history before migration
+    - Store in your database or data warehouse
+    - Keep old platform in read-only mode
+    - Document retention period for old system
+    
+    Polar provides transaction data via API:
+    
+    ```typescript
+    // Future transactions available via API
+    const orders = await polar.orders.list({
+      customerId: customer.id,
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Benefit continuity">
+    **Challenge**: Ensuring uninterrupted access to purchased benefits
+    
+    **Solutions**:
+    - Grant benefits to migrated customers immediately
+    - Map old entitlements to new benefits
+    - Verify benefit access before canceling old subscriptions
+    - Provide fallback access during transition
+    
+    ```typescript
+    // Manually grant benefits during migration
+    await polar.benefits.grants.create({
+      customerId: customer.id,
+      benefitId: benefit.id,
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Customer communication">
+    **Challenge**: Keeping customers informed and reducing confusion
+    
+    **Solutions**:
+    - Announce migration 30 days in advance
+    - Send weekly reminders
+    - Create FAQ page
+    - Offer live support during migration
+    - Send confirmation after successful migration
+    
+    **Email sequence example**:
+    1. **Day 0**: Initial announcement
+    2. **Day 7**: First reminder with action steps
+    3. **Day 14**: Second reminder with deadline
+    4. **Day 21**: Final reminder with support offer
+    5. **Day 30**: Migration complete confirmation
+  </Accordion>
+</AccordionGroup>
+
+## Post-migration tasks
+
+After completing the migration:
+
+<CardGroup cols={2}>
+  <Card title="Verify everything works" icon="check-circle">
+    - Test complete purchase flows
+    - Verify webhook delivery
+    - Check benefit grants
+    - Confirm subscription renewals
+    - Review customer portal access
+  </Card>
+  
+  <Card title="Monitor closely" icon="chart-line">
+    - Watch for failed payments
+    - Track customer support inquiries
+    - Monitor webhook errors
+    - Check benefit grant status
+    - Review transaction success rates
+  </Card>
+  
+  <Card title="Update documentation" icon="book">
+    - Update developer docs
+    - Revise customer help articles
+    - Update marketing materials
+    - Refresh API documentation links
+    - Archive old platform references
+  </Card>
+  
+  <Card title="Gather feedback" icon="comments">
+    - Survey customer experience
+    - Review support tickets
+    - Analyze checkout completion rates
+    - Document lessons learned
+    - Identify optimization opportunities
+  </Card>
+</CardGroup>
+
+## Need migration help?
+
+We're here to help make your migration smooth:
+
+<CardGroup cols={2}>
+  <Card
+    title="Join Discord"
+    icon="discord"
+    href="https://discord.gg/Pnhfz3UThd"
+  >
+    Get real-time help from our community
+  </Card>
+  
+  <Card
+    title="GitHub Discussions"
+    icon="github"
+    href="https://github.com/polarsource/polar/discussions"
+  >
+    Ask questions and share experiences
+  </Card>
+  
+  <Card
+    title="Email Support"
+    icon="envelope"
+    href="mailto:support@polar.sh"
+  >
+    Contact our team for personalized assistance
+  </Card>
+  
+  <Card
+    title="Book a Call"
+    icon="phone"
+    href="https://polar.sh/contact"
+  >
+    Schedule time with our migration specialists
+  </Card>
+</CardGroup>
+
+<Note>
+  **Large-scale migrations**: For organizations with 10,000+ active subscriptions, we offer dedicated migration support. [Contact us](mailto:support@polar.sh) to discuss your specific needs.
+</Note>
+
+## Success stories
+
+<Accordion title="Case Study: SaaS company migrates from Stripe Billing">
+  **Company**: Mid-sized SaaS with 5,000 subscribers
+  
+  **Challenge**: Complex product catalog, multiple subscription tiers, and usage-based billing
+  
+  **Approach**:
+  - Used same Stripe account for seamless transition
+  - Migrated at natural renewal dates over 2 months
+  - Implemented webhooks for both platforms during transition
+  - Leveraged Polar's usage-based billing features
+  
+  **Results**:
+  - Zero customer complaints
+  - Reduced billing code by 60%
+  - Saved $2,000/month in platform fees
+  - Improved checkout conversion by 12%
+  
+  **Timeline**: 6 weeks from start to 100% migration
+</Accordion>
+
+## Additional resources
+
+<CardGroup cols={3}>
+  <Card
+    title="API Reference"
+    icon="book"
+    href="/api-reference/introduction"
+  >
+    Complete API documentation
+  </Card>
+  
+  <Card
+    title="Webhook Events"
+    icon="webhook"
+    href="/integrate/webhooks/events"
+  >
+    All available webhook events
+  </Card>
+  
+  <Card
+    title="SDK Documentation"
+    icon="code"
+    href="/integrate/sdk/typescript"
+  >
+    TypeScript, Python, PHP, and Go SDKs
+  </Card>
+</CardGroup>

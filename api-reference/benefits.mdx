@@ -1,0 +1,295 @@
+---
+title: Benefits
+description: Manage benefits and grants
+---
+
+## Overview
+
+Benefits are perks granted to customers who purchase products. They can be license keys, downloadable files, Discord roles, GitHub repository access, and more.
+
+## The Benefit Object
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the benefit
+</ResponseField>
+
+<ResponseField name="type" type="enum" required>
+  Type: `custom`, `discord`, `github_repository`, `downloadables`, `license_keys`, `ads`, or `feature_flag`
+</ResponseField>
+
+<ResponseField name="description" type="string" required>
+  Benefit description shown to customers
+</ResponseField>
+
+<ResponseField name="organization_id" type="string" required>
+  Organization ID
+</ResponseField>
+
+<ResponseField name="properties" type="object" required>
+  Type-specific configuration
+</ResponseField>
+
+<ResponseField name="is_tax_applicable" type="boolean" required>
+  Whether tax applies to this benefit
+</ResponseField>
+
+<ResponseField name="metadata" type="object">
+  Custom metadata
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  Creation timestamp
+</ResponseField>
+
+---
+
+## List Benefits
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/benefits" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Query Parameters
+
+<ParamField query="organization_id" type="string">
+  Filter by organization
+</ParamField>
+
+<ParamField query="type" type="enum">
+  Filter by benefit type
+</ParamField>
+
+<ParamField query="id" type="string">
+  Filter by benefit ID(s)
+</ParamField>
+
+<ParamField query="exclude_id" type="string">
+  Exclude specific benefit IDs
+</ParamField>
+
+<ParamField query="query" type="string">
+  Filter by description
+</ParamField>
+
+<ParamField query="metadata" type="object">
+  Filter by metadata
+</ParamField>
+
+---
+
+## Get Benefit
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/benefits/{id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Benefit ID
+</ParamField>
+
+---
+
+## Create Benefit
+
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/benefits" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "custom",
+    "description": "Priority email support",
+    "organization_id": "org_123"
+  }'
+```
+
+### Request Body
+
+<ParamField body="type" type="enum" required>
+  Benefit type
+</ParamField>
+
+<ParamField body="description" type="string" required>
+  Description shown to customers
+</ParamField>
+
+<ParamField body="organization_id" type="string">
+  Organization ID (required unless using org token)
+</ParamField>
+
+<ParamField body="properties" type="object">
+  Type-specific properties (see examples below)
+</ParamField>
+
+<ParamField body="is_tax_applicable" type="boolean" default="true">
+  Whether tax applies
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Custom metadata
+</ParamField>
+
+---
+
+## Update Benefit
+
+```bash cURL
+curl -X PATCH "https://api.polar.sh/v1/benefits/{id}" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "24/7 Priority Support"
+  }'
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Benefit ID
+</ParamField>
+
+### Request Body
+
+<ParamField body="description" type="string">
+  Update description
+</ParamField>
+
+<ParamField body="properties" type="object">
+  Update properties
+</ParamField>
+
+---
+
+## Delete Benefit
+
+```bash cURL
+curl -X DELETE "https://api.polar.sh/v1/benefits/{id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Benefit ID
+</ParamField>
+
+---
+
+## Benefit Types
+
+### Custom Benefit
+
+A generic benefit you manage manually:
+
+```json
+{
+  "type": "custom",
+  "description": "Priority support",
+  "properties": {
+    "note": "Grant access in your system"
+  }
+}
+```
+
+### License Keys
+
+Automatically generated license keys:
+
+```json
+{
+  "type": "license_keys",
+  "description": "Software license",
+  "properties": {
+    "prefix": "PROD",
+    "expires": 31536000,
+    "activations": 3,
+    "limit_usage": true
+  }
+}
+```
+
+### Downloadables
+
+Downloadable files:
+
+```json
+{
+  "type": "downloadables",
+  "description": "Premium templates",
+  "properties": {
+    "files": ["file_123", "file_456"]
+  }
+}
+```
+
+### Discord Role
+
+Automatic Discord role assignment:
+
+```json
+{
+  "type": "discord",
+  "description": "VIP Discord role",
+  "properties": {
+    "guild_id": "123456789",
+    "role_id": "987654321"
+  }
+}
+```
+
+### GitHub Repository Access
+
+Grant access to private repositories:
+
+```json
+{
+  "type": "github_repository",
+  "description": "Access to private repo",
+  "properties": {
+    "repository_owner": "myorg",
+    "repository_name": "private-repo",
+    "permission": "pull"
+  }
+}
+```
+
+---
+
+## Examples
+
+### Create License Key Benefit
+
+```bash
+curl -X POST "https://api.polar.sh/v1/benefits" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "license_keys",
+    "description": "Pro License Key",
+    "organization_id": "org_123",
+    "properties": {
+      "prefix": "PRO",
+      "expires": 31536000,
+      "activations": 5
+    }
+  }'
+```
+
+### Create Downloadables Benefit
+
+```bash
+curl -X POST "https://api.polar.sh/v1/benefits" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "downloadables",
+    "description": "Premium Assets Pack",
+    "organization_id": "org_123",
+    "properties": {
+      "files": ["file_abc", "file_def"]
+    }
+  }'
+```

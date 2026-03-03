@@ -1,0 +1,625 @@
+---
+title: 'Seat-Based Pricing'
+description: 'Implement team subscriptions with per-seat pricing and seat management'
+---
+
+This guide shows you how to implement seat-based pricing for team subscriptions, allowing customers to add and remove team members with automatic billing adjustments.
+
+## Overview
+
+Seat-based pricing:
+1. Charges per user/seat (e.g., $10/seat/month)
+2. Customers can add/remove seats dynamically
+3. Billing adjusts automatically with prorations
+4. Supports minimum and maximum seat limits
+
+## Creating Seat-Based Products
+
+First, create a product with seat-based pricing in your Polar dashboard:
+
+1. Go to Products > Create Product
+2. Set billing type to "Seat-based"
+3. Configure:
+   - Price per seat
+   - Minimum seats (e.g., 1)
+   - Maximum seats (e.g., 100)
+   - Billing interval (month/year)
+
+## Checkout with Seats
+
+Create a checkout allowing customers to select seat count:
+
+```typescript
+const checkout = await polar.checkouts.create({
+  productPriceId: 'price_seat_based_...',
+  seats: 5, // Customer purchases 5 seats
+  successUrl: 'https://yoursite.com/success',
+  metadata: {
+    organizationName: 'Acme Corp',
+  },
+})
+
+// Initial cost: 5 seats × $10/seat = $50/month
+```
+
+## Dynamic Seat Selection
+
+Let customers choose seat count before checkout:
+
+```typescript
+'use client'
+
+import { createCheckout } from '@/app/actions/checkout'
+import { useState } from 'react'
+
+interface SeatSelectorProps {
+  productPriceId: string
+  pricePerSeat: number
+  minSeats: number
+  maxSeats: number
+}
+
+export function SeatSelector({ 
+  productPriceId, 
+  pricePerSeat,
+  minSeats,
+  maxSeats 
+}: SeatSelectorProps) {
+  const [seats, setSeats] = useState(minSeats)
+  const [loading, setLoading] = useState(false)
+  
+  const totalPrice = seats * pricePerSeat
+  
+  async function handleCheckout() {
+    setLoading(true)
+    await createCheckout(productPriceId, seats)
+  }
+  
+  return (
+    <div className="border rounded-lg p-6">
+      <h3 className="text-xl font-bold mb-4">Team Plan</h3>
+      
+      <div className="mb-6">
+        <label className="block text-sm font-medium mb-2">
+          Number of seats
+        </label>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setSeats(Math.max(minSeats, seats - 1))}
+            className="w-10 h-10 border rounded-lg"
+            disabled={seats <= minSeats}
+          >
+            -
+          </button>
+          
+          <input
+            type="number"
+            value={seats}
+            onChange={(e) => {
+              const value = parseInt(e.target.value)
+              if (value >= minSeats && value <= maxSeats) {
+                setSeats(value)
+              }
+            }}
+            className="w-20 text-center border rounded-lg py-2"
+            min={minSeats}
+            max={maxSeats}
+          />
+          
+          <button
+            onClick={() => setSeats(Math.min(maxSeats, seats + 1))}
+            className="w-10 h-10 border rounded-lg"
+            disabled={seats >= maxSeats}
+          >
+            +
+          </button>
+        </div>
+        <p className="text-sm text-gray-500 mt-2">
+          {minSeats}-{maxSeats} seats available
+        </p>
+      </div>
+      
+      <div className="bg-gray-50 p-4 rounded-lg mb-4">
+        <div className="flex justify-between mb-2">
+          <span>{seats} × ${pricePerSeat/100}/seat</span>
+          <span className="font-bold">${totalPrice/100}/month</span>
+        </div>
+      </div>
+      
+      <button
+        onClick={handleCheckout}
+        disabled={loading}
+        className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700"
+      >
+        {loading ? 'Loading...' : 'Subscribe'}
+      </button>
+    </div>
+  )
+}
+```
+
+Server action:
+
+```typescript
+// app/actions/checkout.ts
+'use server'
+
+import { polar } from '@/lib/polar'
+import { redirect } from 'next/navigation'
+
+export async function createCheckout(
+  productPriceId: string,
+  seats: number
+) {
+  const checkout = await polar.checkouts.create({
+    productPriceId,
+    seats,
+    successUrl: `${process.env.NEXT_PUBLIC_URL}/success?checkout_id={CHECKOUT_ID}`,
+  })
+  
+  redirect(checkout.url)
+}
+```
+
+## Managing Seats
+
+### Update Seat Count
+
+Customers can increase or decrease seats:
+
+```typescript
+const subscription = await polar.subscriptions.update(
+  subscriptionId,
+  {
+    seats: 10, // Update from 5 to 10 seats
+    prorationBehavior: 'create_prorations',
+  }
+)
+
+// Prorated charge: 5 additional seats for remainder of period
+```
+
+### Customer Portal Integration
+
+Let customers manage seats themselves:
+
+```typescript
+'use client'
+
+import { useState } from 'react'
+
+interface SeatManagerProps {
+  subscription: Subscription
+  customerToken: string
+}
+
+export function SeatManager({ subscription, customerToken }: SeatManagerProps) {
+  const [seats, setSeats] = useState(subscription.seats)
+  const [loading, setLoading] = useState(false)
+  
+  async function updateSeats(newSeats: number) {
+    setLoading(true)
+    
+    try {
+      const response = await fetch(
+        `https://api.polar.sh/v1/customer-portal/subscriptions/${subscription.id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${customerToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ seats: newSeats }),
+        }
+      )
+      
+      if (response.ok) {
+        setSeats(newSeats)
+        alert('Seats updated successfully!')
+      } else {
+        const error = await response.json()
+        alert(error.detail || 'Failed to update seats')
+      }
+    } catch (error) {
+      alert('Failed to update seats')
+    } finally {
+      setLoading(false)
+    }
+  }
+  
+  return (
+    <div className="border rounded-lg p-6">
+      <h3 className="text-lg font-semibold mb-4">Manage Seats</h3>
+      
+      <div className="mb-4">
+        <p className="text-sm text-gray-600 mb-2">
+          Current: {seats} seats
+        </p>
+        <p className="text-sm text-gray-600">
+          ${subscription.amount / 100} / month
+        </p>
+      </div>
+      
+      <div className="flex items-center gap-4 mb-4">
+        <button
+          onClick={() => updateSeats(seats - 1)}
+          disabled={loading || seats <= 1}
+          className="px-4 py-2 border rounded-lg disabled:opacity-50"
+        >
+          Remove Seat
+        </button>
+        
+        <button
+          onClick={() => updateSeats(seats + 1)}
+          disabled={loading}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
+          Add Seat
+        </button>
+      </div>
+      
+      <p className="text-xs text-gray-500">
+        Billing adjusts automatically with prorations
+      </p>
+    </div>
+  )
+}
+```
+
+## Seat Assignment
+
+Assign seats to specific team members:
+
+### List Seats
+
+```typescript
+const seats = await fetch(
+  `https://api.polar.sh/v1/customer-portal/seats?subscription_id=${subscriptionId}`,
+  {
+    headers: {
+      'Authorization': `Bearer ${customerToken}`,
+    },
+  }
+).then(r => r.json())
+
+console.log(`${seats.seats.length} of ${seats.total_seats} seats assigned`)
+console.log(`${seats.available_seats} seats available`)
+```
+
+### Assign Seat
+
+```typescript
+const seat = await fetch(
+  'https://api.polar.sh/v1/customer-portal/seats',
+  {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${customerToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      subscription_id: subscriptionId,
+      email: 'member@example.com',
+      metadata: {
+        role: 'developer',
+        department: 'engineering',
+      },
+    }),
+  }
+).then(r => r.json())
+
+// Invitation email sent to member@example.com
+```
+
+### Revoke Seat
+
+```typescript
+await fetch(
+  `https://api.polar.sh/v1/customer-portal/seats/${seatId}`,
+  {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${customerToken}`,
+    },
+  }
+)
+```
+
+## Seat Management UI
+
+Complete seat management interface:
+
+```typescript
+'use client'
+
+import { useEffect, useState } from 'react'
+
+interface SeatManagementProps {
+  subscriptionId: string
+  customerToken: string
+}
+
+export function SeatManagement({ 
+  subscriptionId, 
+  customerToken 
+}: SeatManagementProps) {
+  const [seats, setSeats] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [email, setEmail] = useState('')
+  
+  useEffect(() => {
+    loadSeats()
+  }, [])
+  
+  async function loadSeats() {
+    const response = await fetch(
+      `https://api.polar.sh/v1/customer-portal/seats?subscription_id=${subscriptionId}`,
+      {
+        headers: { 'Authorization': `Bearer ${customerToken}` },
+      }
+    )
+    const data = await response.json()
+    setSeats(data)
+    setLoading(false)
+  }
+  
+  async function assignSeat() {
+    try {
+      await fetch(
+        'https://api.polar.sh/v1/customer-portal/seats',
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${customerToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            subscription_id: subscriptionId,
+            email,
+          }),
+        }
+      )
+      
+      setEmail('')
+      await loadSeats()
+      alert('Seat assigned successfully!')
+    } catch (error) {
+      alert('Failed to assign seat')
+    }
+  }
+  
+  async function revokeSeat(seatId: string) {
+    if (!confirm('Remove this seat?')) return
+    
+    try {
+      await fetch(
+        `https://api.polar.sh/v1/customer-portal/seats/${seatId}`,
+        {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${customerToken}` },
+        }
+      )
+      
+      await loadSeats()
+      alert('Seat revoked')
+    } catch (error) {
+      alert('Failed to revoke seat')
+    }
+  }
+  
+  if (loading) return <div>Loading...</div>
+  
+  return (
+    <div className="space-y-6">
+      <div className="bg-gray-50 p-4 rounded-lg">
+        <p className="text-sm text-gray-600">
+          {seats.available_seats} of {seats.total_seats} seats available
+        </p>
+      </div>
+      
+      {seats.available_seats > 0 && (
+        <div className="border rounded-lg p-4">
+          <h3 className="font-semibold mb-4">Assign Seat</h3>
+          <div className="flex gap-2">
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="member@example.com"
+              className="flex-1 border rounded-lg px-4 py-2"
+            />
+            <button
+              onClick={assignSeat}
+              disabled={!email}
+              className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
+            >
+              Assign
+            </button>
+          </div>
+        </div>
+      )}
+      
+      <div>
+        <h3 className="font-semibold mb-4">Team Members</h3>
+        <div className="space-y-2">
+          {seats.seats.map((seat: any) => (
+            <div key={seat.id} className="flex items-center justify-between border rounded-lg p-4">
+              <div>
+                <p className="font-medium">{seat.email}</p>
+                <p className="text-sm text-gray-500">
+                  Status: {seat.status}
+                </p>
+              </div>
+              <button
+                onClick={() => revokeSeat(seat.id)}
+                className="text-red-600 hover:text-red-700"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+          
+          {seats.seats.length === 0 && (
+            <p className="text-gray-500 text-center py-8">
+              No seats assigned yet
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+```
+
+## Proration on Seat Changes
+
+When seats are added/removed mid-cycle:
+
+**Adding Seats:**
+```typescript
+// Current: 5 seats at $10/seat = $50/month
+// Add 3 seats mid-cycle (15 days remaining)
+// Charge: 3 seats × $10 × (15/30) = $15
+// Next month: 8 seats × $10 = $80
+```
+
+**Removing Seats:**
+```typescript
+// Current: 5 seats at $10/seat = $50/month
+// Remove 2 seats mid-cycle (15 days remaining)
+// Credit: 2 seats × $10 × (15/30) = $10
+// Applied to next invoice
+```
+
+## Seat Limits
+
+Enforce minimum and maximum seats:
+
+```typescript
+try {
+  await polar.subscriptions.update(subscriptionId, {
+    seats: 2, // Below minimum of 3
+  })
+} catch (error) {
+  // Error: Minimum 3 seats required
+}
+
+try {
+  await polar.subscriptions.update(subscriptionId, {
+    seats: 150, // Above maximum of 100
+  })
+} catch (error) {
+  // Error: Maximum 100 seats allowed
+}
+```
+
+## Preventing Downgrade
+
+Prevent reducing seats below assigned count:
+
+```typescript
+try {
+  // 5 seats assigned, trying to reduce to 3
+  await polar.subscriptions.update(subscriptionId, {
+    seats: 3,
+  })
+} catch (error) {
+  // Error: Cannot decrease seats to 3. Currently 5 seats are assigned.
+  // Revoke seats first.
+}
+```
+
+## Webhooks
+
+Handle seat-related events:
+
+```typescript
+app.post('/webhooks/polar', (req, res) => {
+  const event = polar.webhooks.verifyEvent(...)
+  
+  switch (event.type) {
+    case 'subscription.updated':
+      if (event.data.seats !== event.data.previousSeats) {
+        // Seats changed
+        console.log(`Seats: ${event.data.previousSeats} → ${event.data.seats}`)
+        console.log(`Amount: ${event.data.amount}`)
+      }
+      break
+    
+    case 'customer_seat.assigned':
+      // New seat assigned
+      await provisionAccess(event.data.email, event.data.subscriptionId)
+      break
+    
+    case 'customer_seat.revoked':
+      // Seat removed
+      await revokeAccess(event.data.email, event.data.subscriptionId)
+      break
+  }
+  
+  res.json({ received: true })
+})
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="User Experience">
+    - Show clear pricing breakdown
+    - Allow easy seat adjustments
+    - Send member invitation emails
+    - Display current seat usage
+    - Warn before removing assigned seats
+  </Accordion>
+  
+  <Accordion title="Business Logic">
+    - Set appropriate min/max limits
+    - Enforce seat assignments
+    - Track seat utilization
+    - Monitor unused seats
+    - Offer volume discounts
+  </Accordion>
+  
+  <Accordion title="Technical">
+    - Handle proration correctly
+    - Use webhooks for access control
+    - Validate seat limits
+    - Log all seat changes
+    - Test edge cases
+  </Accordion>
+</AccordionGroup>
+
+## Testing
+
+<Steps>
+  <Step title="Create seat-based product">
+    Set up product with seat pricing in test mode
+  </Step>
+  
+  <Step title="Test checkout">
+    Create checkout with various seat counts
+  </Step>
+  
+  <Step title="Test seat management">
+    Add/remove seats and verify prorations
+  </Step>
+  
+  <Step title="Test seat assignment">
+    Assign and revoke seats
+  </Step>
+  
+  <Step title="Verify webhooks">
+    Check all seat-related webhook events
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Subscription Upgrades" icon="arrow-up" href="/guides/subscription-upgrades">
+    Handle seat plan upgrades
+  </Card>
+  <Card title="Customer Portal" icon="user" href="/api-reference/customer-portal/overview">
+    Build complete customer portal
+  </Card>
+</CardGroup>

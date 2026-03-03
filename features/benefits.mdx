@@ -1,0 +1,587 @@
+---
+title: "Benefits"
+description: "Automatically grant access to digital resources and services"
+---
+
+Benefits are perks automatically granted when customers purchase products or subscribe. Polar handles the complete lifecycle: granting access when purchases occur, managing ongoing access, and revoking when subscriptions end.
+
+## Overview
+
+Benefits enable you to:
+
+- Grant access to GitHub repositories
+- Invite customers to Discord servers
+- Generate and distribute license keys
+- Provide file downloads
+- Issue usage credits for metered billing
+- Control feature flags
+- Trigger custom webhooks
+
+## Benefit Types
+
+<Tabs>
+  <Tab title="License Keys">
+    Generate unique license keys for software activation.
+    
+    **Use cases**: Software licenses, API keys, activation codes
+  </Tab>
+  <Tab title="File Downloads">
+    Provide access to downloadable files.
+    
+    **Use cases**: Digital products, documents, media files
+  </Tab>
+  <Tab title="GitHub Repository">
+    Auto-invite to private GitHub repositories.
+    
+    **Use cases**: Private code access, early access repos
+  </Tab>
+  <Tab title="Discord Access">
+    Auto-invite to Discord servers with role assignment.
+    
+    **Use cases**: Community access, premium channels
+  </Tab>
+  <Tab title="Meter Credit">
+    Grant credits for usage-based billing.
+    
+    **Use cases**: API call credits, resource allowances
+  </Tab>
+  <Tab title="Feature Flag">
+    Control feature access in your application.
+    
+    **Use cases**: Premium features, beta access
+  </Tab>
+  <Tab title="Custom">
+    Trigger webhooks for custom fulfillment.
+    
+    **Use cases**: Custom integrations, third-party services
+  </Tab>
+</Tabs>
+
+## Creating Benefits
+
+Create benefits through the API:
+
+<CodeGroup>
+```typescript License Keys
+const benefit = await polar.benefits.create({
+  organization_id: orgId,
+  description: "Pro License Key",
+  type: "license_keys",
+  properties: {
+    prefix: "PRO",              // Optional: PRO-XXXX-XXXX
+    expires: {
+      ttl: 1,
+      timeframe: "year"         // year, month, or day
+    },
+    activations: {
+      limit: 3,                 // Max devices
+      enable_customer_admin: true  // Allow customer to manage
+    },
+    limit_usage: 1000          // Max uses (optional)
+  }
+});
+```
+
+```typescript File Downloads
+const benefit = await polar.benefits.create({
+  organization_id: orgId,
+  description: "Premium Resources",
+  type: "downloadables",
+  properties: {
+    files: [fileId1, fileId2],
+    archived: {}              // Map of archived file IDs
+  }
+});
+```
+
+```typescript GitHub Repository
+const benefit = await polar.benefits.create({
+  organization_id: orgId,
+  description: "Private Repo Access",
+  type: "github_repository",
+  properties: {
+    repository_owner: "your-org",
+    repository_name: "private-repo",
+    permission: "pull"        // pull, triage, push, maintain, admin
+  }
+});
+```
+
+```typescript Discord Access
+const benefit = await polar.benefits.create({
+  organization_id: orgId,
+  description: "VIP Discord Role",
+  type: "discord",
+  properties: {
+    guild_token: discordGuildToken,  // From Discord OAuth
+    role_id: "123456789",
+    kick_member: true                // Remove on revocation
+  }
+});
+```
+
+```typescript Meter Credit
+const benefit = await polar.benefits.create({
+  organization_id: orgId,
+  description: "1000 API Credits",
+  type: "meter_credit",
+  properties: {
+    meter_id: meterId,
+    credits: 1000
+  }
+});
+```
+
+```typescript Feature Flag
+const benefit = await polar.benefits.create({
+  organization_id: orgId,
+  description: "Premium Features",
+  type: "feature_flag",
+  properties: {
+    key: "premium_features"
+  }
+});
+```
+
+```typescript Custom Webhook
+const benefit = await polar.benefits.create({
+  organization_id: orgId,
+  description: "Custom Integration",
+  type: "custom",
+  properties: {
+    note: "Triggers custom webhook"
+  }
+});
+```
+</CodeGroup>
+
+## Attaching Benefits to Products
+
+Benefits are granted by attaching them to products:
+
+```typescript
+await polar.products.updateBenefits(productId, {
+  benefits: [benefitId1, benefitId2, benefitId3]
+});
+```
+
+When a customer purchases or subscribes:
+1. Order/subscription is created
+2. Benefits are automatically granted
+3. Customer receives confirmation with benefit details
+
+## Benefit Grants
+
+Benefit grants track individual customer access.
+
+### Viewing Grants
+
+List grants for a benefit:
+
+```typescript
+const { items: grants } = await polar.benefits.grants(benefitId, {
+  is_granted: true,            // Active grants only
+  customer_id: [customerId]
+});
+
+grants.forEach(grant => {
+  console.log(grant.customer.email);
+  console.log(grant.properties);  // Type-specific properties
+  console.log(grant.granted_at);
+});
+```
+
+### Grant Properties
+
+Each grant type has specific properties:
+
+<Tabs>
+  <Tab title="License Keys">
+    ```typescript
+    {
+      license_key: "PRO-1A2B-3C4D-5E6F",
+      display_key: "PRO-••••-••••-5E6F",
+      activation_url: "https://app.com/activate?key=...",
+      expires_at: "2025-01-01T00:00:00Z"
+    }
+    ```
+  </Tab>
+  <Tab title="File Downloads">
+    ```typescript
+    {
+      files: [
+        {
+          id: "file_xxx",
+          name: "premium-pack.zip",
+          url: "https://..."
+        }
+      ]
+    }
+    ```
+  </Tab>
+  <Tab title="GitHub Repository">
+    ```typescript
+    {
+      repository_owner: "your-org",
+      repository_name: "private-repo",
+      invitation_url: "https://github.com/..."
+    }
+    ```
+  </Tab>
+  <Tab title="Discord Access">
+    ```typescript
+    {
+      guild_id: "123456789",
+      invitation_url: "https://discord.gg/..."
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Benefit Lifecycle
+
+<Steps>
+  <Step title="Product Purchase">
+    Customer purchases a product with benefits attached.
+  </Step>
+  <Step title="Grant Created">
+    Benefit grants are created for the customer.
+    Status: `is_granted: true`
+  </Step>
+  <Step title="Access Provided">
+    - License keys generated
+    - GitHub invitations sent
+    - Discord roles assigned
+    - Files made available
+  </Step>
+  <Step title="Active Use">
+    Customer uses the benefit. Polar tracks usage and status.
+  </Step>
+  <Step title="Revocation">
+    When subscription ends or is canceled:
+    - `is_granted: false`
+    - Access removed
+    - Keys deactivated
+  </Step>
+</Steps>
+
+## License Keys
+
+### Configuration
+
+License keys support several configuration options:
+
+<AccordionGroup>
+  <Accordion title="Prefix">
+    Optional prefix for generated keys (e.g., "PRO-XXXX-XXXX-XXXX").
+  </Accordion>
+  <Accordion title="Expiration">
+    Set automatic expiration:
+    - `ttl`: Number of time units
+    - `timeframe`: year, month, or day
+  </Accordion>
+  <Accordion title="Activations">
+    Limit how many devices can use a key:
+    - `limit`: Max simultaneous activations (1-50)
+    - `enable_customer_admin`: Allow customers to manage activations
+  </Accordion>
+  <Accordion title="Usage Limit">
+    Limit total number of uses (validations) across all activations.
+  </Accordion>
+</AccordionGroup>
+
+### Customer Management
+
+With `enable_customer_admin`, customers can:
+- View active devices
+- Deactivate devices
+- See remaining activations
+- Access via customer portal
+
+### Key Validation
+
+Validate license keys via API:
+
+```typescript
+const validation = await polar.licenses.validate({
+  key: "PRO-1A2B-3C4D-5E6F",
+  organization_id: orgId,
+  benefit_id: benefitId,
+  activation_id: deviceId  // Optional: track device
+});
+
+if (validation.valid) {
+  console.log('Activations:', validation.activations);
+  console.log('Limit:', validation.limit);
+}
+```
+
+## File Downloads
+
+### Upload Files
+
+Upload files through the dashboard or API:
+
+```typescript
+// 1. Create upload URL
+const upload = await polar.files.create({
+  organization_id: orgId,
+  name: "premium-pack.zip",
+  mime_type: "application/zip",
+  size: 1024000,
+  service: "downloadable"
+});
+
+// 2. Upload to signed URL
+await fetch(upload.upload_url, {
+  method: 'PUT',
+  body: fileData
+});
+
+// 3. Complete upload
+await polar.files.complete(upload.id);
+```
+
+### Manage Files
+
+Update benefit to add/remove files:
+
+```typescript
+await polar.benefits.update(benefitId, {
+  properties: {
+    files: [fileId1, fileId2, newFileId],
+    archived: {
+      [oldFileId]: true  // Archive file
+    }
+  }
+});
+```
+
+## GitHub Repository Access
+
+### Setup
+
+<Steps>
+  <Step title="Install GitHub App">
+    Install the Polar GitHub App on your organization.
+  </Step>
+  <Step title="Grant Repository Access">
+    Give the app access to private repositories.
+  </Step>
+  <Step title="Create Benefit">
+    Create a GitHub repository benefit with desired permission level.
+  </Step>
+</Steps>
+
+### Permission Levels
+
+- **pull**: Read-only access
+- **triage**: Read + manage issues/PRs
+- **push**: Read + write access
+- **maintain**: Push + manage settings
+- **admin**: Full control
+
+See [GitHub documentation](https://docs.github.com/en/organizations/managing-user-access-to-your-organizations-repositories/managing-repository-roles/repository-roles-for-an-organization) for details.
+
+### How It Works
+
+1. Customer purchases product
+2. Polar sends GitHub invitation
+3. Customer accepts invitation via email
+4. Access granted with specified permission
+5. On cancellation, access is revoked
+
+## Discord Access
+
+### Setup
+
+<Steps>
+  <Step title="Connect Discord Server">
+    Connect your Discord server through the Polar dashboard.
+  </Step>
+  <Step title="Select Role">
+    Choose which role to assign to customers.
+  </Step>
+  <Step title="Configure Removal">
+    Set whether to kick members on revocation or just remove role.
+  </Step>
+</Steps>
+
+### How It Works
+
+1. Customer purchases product
+2. Polar generates Discord invitation
+3. Customer joins via invitation link
+4. Role automatically assigned
+5. On cancellation:
+   - Role removed
+   - Optionally kicked from server
+
+## Meter Credits
+
+Grant usage credits as a benefit:
+
+```typescript
+const benefit = await polar.benefits.create({
+  description: "1000 API Calls",
+  type: "meter_credit",
+  properties: {
+    meter_id: apiCallMeterId,
+    credits: 1000
+  }
+});
+```
+
+Credits are:
+- Granted when subscription starts
+- Replenished each billing cycle
+- Consumed by usage events
+
+See [Usage-Based Billing](/features/usage-based-billing/introduction) for details.
+
+## Feature Flags
+
+Control feature access in your application:
+
+```typescript
+// Check if customer has feature access
+const customer = await polar.customers.get(customerId);
+const hasFeature = customer.benefits.some(
+  b => b.type === "feature_flag" && b.properties.key === "premium_features"
+);
+
+if (hasFeature) {
+  // Enable premium features
+}
+```
+
+## Custom Webhooks
+
+Custom benefits trigger webhooks for your own fulfillment:
+
+```json
+// benefit.granted webhook
+{
+  "type": "benefit.granted",
+  "data": {
+    "customer": { /* ... */ },
+    "benefit": {
+      "type": "custom",
+      "description": "Custom Integration",
+      "properties": {
+        "note": "Trigger custom logic"
+      }
+    },
+    "properties": {}  // Your custom grant data
+  }
+}
+```
+
+Implement your fulfillment logic in the webhook handler.
+
+## Webhooks
+
+Listen for benefit events:
+
+<CardGroup cols={2}>
+  <Card title="benefit.granted" icon="check">
+    Benefit granted to customer
+  </Card>
+  <Card title="benefit.revoked" icon="xmark">
+    Benefit revoked from customer
+  </Card>
+  <Card title="benefit.updated" icon="pen">
+    Benefit configuration updated
+  </Card>
+</CardGroup>
+
+## Updating Benefits
+
+Update benefit configuration:
+
+```typescript
+await polar.benefits.update(benefitId, {
+  description: "Updated Description",
+  properties: {
+    // Type-specific properties
+  }
+});
+```
+
+<Warning>
+  Changing properties may affect existing grants. For example, changing a license key expiration affects all issued keys.
+</Warning>
+
+## Deleting Benefits
+
+Delete benefits to revoke all grants:
+
+```typescript
+await polar.benefits.delete(benefitId);
+```
+
+<Warning>
+  - All grants are immediately revoked
+  - Access removed for all customers
+  - Cannot be undone
+  - Remove from products first to prevent new grants
+</Warning>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="License Keys">
+    - Set reasonable activation limits (3-5 for most software)
+    - Enable customer admin for better experience
+    - Use prefixes to identify product tiers
+    - Set expiration for time-limited licenses
+  </Accordion>
+
+  <Accordion title="File Downloads">
+    - Use versioning in file names
+    - Archive old files instead of deleting
+    - Keep file sizes reasonable (under 100MB)
+    - Provide multiple formats when possible
+  </Accordion>
+
+  <Accordion title="GitHub Access">
+    - Use minimum required permission level
+    - Create dedicated repos for customers
+    - Document access in README
+    - Monitor repository access logs
+  </Accordion>
+
+  <Accordion title="Discord Access">
+    - Create dedicated customer roles
+    - Set up proper channel permissions
+    - Choose kick settings carefully
+    - Welcome new members automatically
+  </Accordion>
+
+  <Accordion title="Benefit Design">
+    - Keep benefit names clear and descriptive
+    - Test fulfillment before attaching to products
+    - Group related benefits on the same product
+    - Document benefit usage for customers
+  </Accordion>
+</AccordionGroup>
+
+## API Reference
+
+<CardGroup cols={2}>
+  <Card title="Create Benefit" icon="plus" href="/api-reference/benefits">
+    Create a new benefit
+  </Card>
+  <Card title="List Benefits" icon="list" href="/api-reference/benefits">
+    Query benefits with filters
+  </Card>
+  <Card title="Update Benefit" icon="pen" href="/api-reference/benefits">
+    Modify benefit configuration
+  </Card>
+  <Card title="Delete Benefit" icon="trash" href="/api-reference/benefits">
+    Remove benefit and revoke grants
+  </Card>
+  <Card title="List Grants" icon="users" href="/api-reference/benefits">
+    View benefit grants
+  </Card>
+</CardGroup>

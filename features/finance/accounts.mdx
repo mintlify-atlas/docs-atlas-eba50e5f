@@ -1,0 +1,157 @@
+---
+title: Financial Accounts
+description: Set up and manage your financial account for receiving payouts
+---
+
+## Overview
+
+A financial account is required to receive payouts from Polar. We support Stripe Connect accounts, which handle the infrastructure for receiving payments worldwide.
+
+## Account Types
+
+Polar currently supports **Stripe Connect** accounts as the payment processor. Stripe handles:
+
+- Payment processing
+- Currency conversion
+- Bank transfers
+- Compliance requirements
+
+## Setting Up Your Account
+
+### Initial Setup
+
+1. Navigate to your organization's finance settings
+2. Click "Create Account" or "Connect Stripe Account"
+3. Select your account country from the [supported countries](/merchant-of-record/supported-countries)
+4. Complete the Stripe onboarding process
+
+### Account Statuses
+
+Your account will progress through several statuses:
+
+- **Created**: Account record created, onboarding not started
+- **Onboarding Started**: Stripe onboarding flow initiated
+- **Under Review**: Account submitted and being reviewed (see [Account Reviews](/merchant-of-record/account-reviews))
+- **Active**: Account fully operational and can receive payouts
+- **Denied**: Account rejected during review
+
+<Warning>
+Your account must be in **Active** status with payouts enabled before you can receive funds.
+</Warning>
+
+## Account Capabilities
+
+Your Stripe account has three key capabilities that determine what you can do:
+
+### Details Submitted
+
+Indicates whether you've completed the required onboarding information.
+
+### Charges Enabled
+
+When enabled, your account can accept payments from customers.
+
+### Payouts Enabled
+
+When enabled, funds can be transferred to your bank account. This requires:
+
+- Completed onboarding
+- Verified identity
+- Connected bank account
+- Active account status
+
+## Account Administration
+
+### Account Admin
+
+Each financial account has a designated admin who:
+
+- Owns the Stripe account
+- Must have verified identity with Stripe
+- Can access the Stripe Express dashboard
+- Is responsible for compliance
+
+### Changing the Admin
+
+<Warning>
+The Stripe account must be deleted before changing the admin. This is required for compliance.
+</Warning>
+
+To change the account admin:
+
+1. Delete the existing Stripe connection
+2. Assign the new admin (must be an organization member)
+3. New admin must have verified identity status
+4. Reconnect a new Stripe account
+
+## Multi-Organization Accounts
+
+A single financial account can be linked to multiple organizations, allowing you to:
+
+- Consolidate payouts across organizations
+- Simplify financial management
+- Reduce administrative overhead
+
+## Billing Information
+
+For reverse invoicing (when Polar invoices you for platform fees), configure:
+
+- **Billing Name**: Legal entity name
+- **Billing Address**: Complete business address
+- **Additional Info**: Tax ID or other required information
+- **Billing Notes**: Optional notes for invoices
+
+## Stripe Express Dashboard
+
+Access your Stripe Express dashboard to:
+
+- View transaction history
+- Update bank account details
+- Manage business information
+- Review payout schedules
+- Download Stripe reports
+
+Click "Open Stripe Dashboard" from your account settings to generate a secure login link.
+
+## Account Deletion
+
+Deleting your Stripe account:
+
+1. Removes Stripe account connection
+2. Clears all Stripe-related data
+3. Disables charges and payouts
+4. Archives the account record
+5. Allows reconnecting a new account
+
+<Warning>
+Deleting your Stripe account is permanent and cannot be undone. Ensure all pending payouts are processed first.
+</Warning>
+
+## Disconnecting vs Deleting
+
+### Disconnect
+
+- Breaks the link to Stripe
+- Preserves historical data
+- Allows reconnecting the same account
+- Account remains in Polar's system
+
+### Delete
+
+- Permanently removes Stripe account
+- Deletes account from Stripe's system
+- Cannot be reconnected
+- Use when starting fresh
+
+## Security
+
+- Account access controlled by organization membership
+- Admin actions require authentication
+- Stripe handles PCI compliance
+- All financial data encrypted at rest and in transit
+
+## Next Steps
+
+- Learn about [Balance Tracking](/features/finance/balance)
+- Understand [Payout Processing](/features/finance/payouts)
+- Review [Fee Structure](/merchant-of-record/fees)

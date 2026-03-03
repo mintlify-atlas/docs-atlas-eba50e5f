@@ -1,0 +1,336 @@
+---
+title: Meters
+description: Define usage meters for metered billing
+---
+
+## Overview
+
+Meters define how to aggregate events into billable usage. They specify which events to count and how to calculate the quantity.
+
+## The Meter Object
+
+<ResponseField name="id" type="string" required>
+  Unique identifier
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Meter name
+</ResponseField>
+
+<ResponseField name="slug" type="string" required>
+  URL-friendly identifier
+</ResponseField>
+
+<ResponseField name="filter" type="object" required>
+  Event filter clause
+</ResponseField>
+
+<ResponseField name="aggregation" type="enum" required>
+  Aggregation function: `count`, `sum`, `avg`, `max`, or `unique_count`
+</ResponseField>
+
+<ResponseField name="aggregate_field" type="string">
+  Property to aggregate (required for sum/avg/max)
+</ResponseField>
+
+<ResponseField name="organization_id" type="string" required>
+  Organization ID
+</ResponseField>
+
+<ResponseField name="is_archived" type="boolean" required>
+  Whether meter is archived
+</ResponseField>
+
+<ResponseField name="metadata" type="object">
+  Custom metadata
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  Creation timestamp
+</ResponseField>
+
+---
+
+## List Meters
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/meters" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Query Parameters
+
+<ParamField query="organization_id" type="string">
+  Filter by organization
+</ParamField>
+
+<ParamField query="query" type="string">
+  Filter by name
+</ParamField>
+
+<ParamField query="is_archived" type="boolean">
+  Filter archived meters
+</ParamField>
+
+<ParamField query="metadata" type="object">
+  Filter by metadata
+</ParamField>
+
+---
+
+## Get Meter
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/meters/{id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Meter ID
+</ParamField>
+
+---
+
+## Create Meter
+
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/meters" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "API Requests",
+    "slug": "api_requests",
+    "filter": {
+      "type": "and",
+      "clauses": [
+        {
+          "type": "property",
+          "property": "name",
+          "operator": "eq",
+          "value": "api_request"
+        }
+      ]
+    },
+    "aggregation": "count",
+    "organization_id": "org_123"
+  }'
+```
+
+### Request Body
+
+<ParamField body="name" type="string" required>
+  Meter name
+</ParamField>
+
+<ParamField body="slug" type="string">
+  URL-friendly slug (auto-generated if not provided)
+</ParamField>
+
+<ParamField body="filter" type="object" required>
+  Filter clause to match events
+  
+  <Expandable title="Filter Structure">
+    Filters use a clause-based structure:
+    
+    **Property Filter:**
+    ```json
+    {
+      "type": "property",
+      "property": "name",
+      "operator": "eq",
+      "value": "api_request"
+    }
+    ```
+    
+    Operators: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `contains`, `in`
+    
+    **Logical Filters:**
+    ```json
+    {
+      "type": "and",
+      "clauses": [...]
+    }
+    ```
+    
+    Types: `and`, `or`, `not`
+  </Expandable>
+</ParamField>
+
+<ParamField body="aggregation" type="enum" required>
+  How to aggregate: `count`, `sum`, `avg`, `max`, `unique_count`
+</ParamField>
+
+<ParamField body="aggregate_field" type="string">
+  Event property to aggregate (required for sum/avg/max)
+</ParamField>
+
+<ParamField body="organization_id" type="string">
+  Organization ID (required unless using org token)
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Custom metadata
+</ParamField>
+
+---
+
+## Update Meter
+
+```bash cURL
+curl -X PATCH "https://api.polar.sh/v1/meters/{id}" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "API Requests (Updated)",
+    "is_archived": false
+  }'
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Meter ID
+</ParamField>
+
+### Request Body
+
+<ParamField body="name" type="string">
+  Update name
+</ParamField>
+
+<ParamField body="is_archived" type="boolean">
+  Archive/unarchive meter
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Update metadata
+</ParamField>
+
+---
+
+## Get Meter Quantities
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/meters/{id}/quantities" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+Get aggregated quantities for a meter over time.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Meter ID
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="start_timestamp" type="string" required>
+  Start of time range
+</ParamField>
+
+<ParamField query="end_timestamp" type="string" required>
+  End of time range
+</ParamField>
+
+<ParamField query="interval" type="enum" required>
+  Time interval: `hour`, `day`, `week`, or `month`
+</ParamField>
+
+<ParamField query="customer_id" type="string">
+  Filter by customer
+</ParamField>
+
+<ParamField query="timezone" type="string" default="UTC">
+  Timezone for aggregation (e.g., `America/New_York`)
+</ParamField>
+
+---
+
+## Delete Meter
+
+```bash cURL
+curl -X DELETE "https://api.polar.sh/v1/meters/{id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+<Warning>
+  Deleting a meter will affect any products using metered pricing based on this meter.
+</Warning>
+
+---
+
+## Examples
+
+### Count Events
+
+```bash
+curl -X POST "https://api.polar.sh/v1/meters" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "API Calls",
+    "slug": "api_calls",
+    "filter": {
+      "type": "property",
+      "property": "name",
+      "operator": "eq",
+      "value": "api_request"
+    },
+    "aggregation": "count",
+    "organization_id": "org_123"
+  }'
+```
+
+### Sum Property Values
+
+```bash
+curl -X POST "https://api.polar.sh/v1/meters" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Data Transfer (GB)",
+    "slug": "data_transfer_gb",
+    "filter": {
+      "type": "property",
+      "property": "name",
+      "operator": "eq",
+      "value": "data_transfer"
+    },
+    "aggregation": "sum",
+    "aggregate_field": "bytes",
+    "organization_id": "org_123"
+  }'
+```
+
+### Complex Filter
+
+```bash
+curl -X POST "https://api.polar.sh/v1/meters" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Premium API Calls",
+    "filter": {
+      "type": "and",
+      "clauses": [
+        {
+          "type": "property",
+          "property": "name",
+          "operator": "eq",
+          "value": "api_request"
+        },
+        {
+          "type": "property",
+          "property": "tier",
+          "operator": "eq",
+          "value": "premium"
+        }
+      ]
+    },
+    "aggregation": "count",
+    "organization_id": "org_123"
+  }'
+```

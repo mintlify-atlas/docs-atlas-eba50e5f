@@ -1,0 +1,473 @@
+---
+title: "Subscriptions"
+description: "Manage recurring billing and subscription lifecycles"
+---
+
+Subscriptions enable recurring revenue by automatically charging customers at regular intervals. Polar handles the complete subscription lifecycle including trials, upgrades, cancellations, and renewals.
+
+## Overview
+
+Subscriptions in Polar:
+
+- Bill automatically at defined intervals (month, year, etc.)
+- Support trials with automatic conversion
+- Handle metered usage billing
+- Manage seat-based pricing
+- Apply discounts and credits
+- Grant and revoke benefits automatically
+
+## Subscription Lifecycle
+
+<Steps>
+  <Step title="Creation">
+    Created via checkout or API (free products only).
+    Status: `incomplete` → `trialing` or `active`
+  </Step>
+  <Step title="Active">
+    Subscription is active, benefits granted, billing occurs regularly.
+  </Step>
+  <Step title="Renewal">
+    Automatic billing at period end. Creates new order.
+  </Step>
+  <Step title="Cancellation">
+    Can be immediate (revoked) or at period end.
+    Status: `active` → `canceled`
+  </Step>
+  <Step title="End">
+    Access revoked, benefits removed.
+    Status: `canceled` → `ended`
+  </Step>
+</Steps>
+
+## Creating Subscriptions
+
+### Via Checkout (Recommended)
+
+Most subscriptions are created through the checkout flow:
+
+```typescript
+const checkout = await polar.checkouts.custom.create({
+  products: [subscriptionProductId],
+  customer_email: "customer@example.com"
+});
+```
+
+### Programmatic Creation (Free Products Only)
+
+Create free subscriptions directly via API:
+
+```typescript
+const subscription = await polar.subscriptions.create({
+  product_id: freeProductId,
+  customer_id: customerId
+});
+```
+
+<Warning>
+  Paid subscriptions must go through checkout to handle payment collection and tax calculation.
+</Warning>
+
+## Subscription Status
+
+<Tabs>
+  <Tab title="incomplete">
+    Initial state. Payment setup in progress.
+  </Tab>
+  <Tab title="trialing">
+    In trial period. No charges yet. Benefits granted.
+  </Tab>
+  <Tab title="active">
+    Subscription active and billing. Benefits granted.
+  </Tab>
+  <Tab title="canceled">
+    Canceled but still active until period end.
+  </Tab>
+  <Tab title="past_due">
+    Payment failed. Retrying automatic collection.
+  </Tab>
+  <Tab title="unpaid">
+    Payment failed after retries. Benefits revoked.
+  </Tab>
+  <Tab title="ended">
+    Subscription permanently ended. Benefits revoked.
+  </Tab>
+</Tabs>
+
+## Updating Subscriptions
+
+Subscriptions support several update operations:
+
+### Change Product
+
+Upgrade or downgrade to a different product:
+
+```typescript
+await polar.subscriptions.update(subscriptionId, {
+  product_id: newProductId,
+  proration_behavior: "create_prorations"  // or "always_invoice", "none"
+});
+```
+
+<Accordion title="Proration Behaviors">
+  - `create_prorations`: Generate credits for unused time
+  - `always_invoice`: Charge immediately for the difference
+  - `none`: Change takes effect at next billing cycle
+  - Organization default used if not specified
+</Accordion>
+
+### Apply Discount
+
+Add or change discounts:
+
+```typescript
+await polar.subscriptions.update(subscriptionId, {
+  discount_id: discountId  // or null to remove
+});
+```
+
+<Note>
+  Discount changes take effect at the next billing cycle.
+</Note>
+
+### Extend or End Trial
+
+Modify trial period:
+
+```typescript
+// Extend trial
+await polar.subscriptions.update(subscriptionId, {
+  trial_end: "2024-12-31T23:59:59Z"  // ISO 8601 date
+});
+
+// End trial immediately
+await polar.subscriptions.update(subscriptionId, {
+  trial_end: "now"
+});
+```
+
+### Update Seats
+
+For seat-based subscriptions:
+
+```typescript
+await polar.subscriptions.update(subscriptionId, {
+  seats: 15,
+  proration_behavior: "create_prorations"
+});
+```
+
+### Adjust Billing Period
+
+Change the next billing date:
+
+```typescript
+await polar.subscriptions.update(subscriptionId, {
+  current_billing_period_end: "2024-07-01T00:00:00Z"
+});
+```
+
+## Canceling Subscriptions
+
+### Cancel at Period End
+
+Cancel but allow access until the current period ends:
+
+```typescript
+await polar.subscriptions.update(subscriptionId, {
+  cancel_at_period_end: true
+});
+```
+
+The subscription:
+- Remains `active` until period end
+- Sets `cancel_at_period_end: true`
+- Won't renew at period end
+- Benefits remain active until end
+
+### Revoke Immediately
+
+Cancel and end subscription immediately:
+
+```typescript
+await polar.subscriptions.revoke(subscriptionId);
+```
+
+The subscription:
+- Changes to `canceled` status immediately
+- Benefits revoked immediately
+- No refund issued
+- No further charges
+
+<Warning>
+  Immediate revocation cannot be undone. Consider canceling at period end instead.
+</Warning>
+
+## Subscription Billing
+
+### Billing Cycle
+
+Subscriptions bill based on their interval:
+
+```typescript
+{
+  recurring_interval: "month",     // month, year
+  recurring_interval_count: 1,     // every 1 month
+  current_period_start: "2024-01-01T00:00:00Z",
+  current_period_end: "2024-02-01T00:00:00Z"
+}
+```
+
+### Charge Preview
+
+Preview the next charge before it occurs:
+
+```typescript
+const preview = await polar.subscriptions.getChargePreview(subscriptionId);
+```
+
+Returns:
+```typescript
+{
+  subtotal_amount: 1900,    // Base subscription
+  discount_amount: 190,     // Applied discounts
+  tax_amount: 153,          // Calculated tax
+  total_amount: 1863,       // Final charge
+  currency: "usd",
+  items: [
+    {
+      label: "Pro Plan",
+      amount: 1900,
+      proration: false
+    },
+    // Metered charges
+    {
+      label: "API Calls",
+      amount: 500,
+      proration: false
+    }
+  ]
+}
+```
+
+### Metered Billing
+
+For subscriptions with metered prices:
+
+```typescript
+const subscription = await polar.subscriptions.get(subscriptionId);
+
+// Check current usage
+subscription.meters.forEach(meter => {
+  console.log(meter.meter.name);
+  console.log('Consumed:', meter.consumed_units);
+  console.log('Current charges:', meter.amount / 100);
+});
+```
+
+See [Usage-Based Billing](/features/usage-based-billing/introduction) for details.
+
+## Subscription Metadata
+
+Store and update custom data:
+
+```typescript
+await polar.subscriptions.update(subscriptionId, {
+  metadata: {
+    external_id: "sub_xyz",
+    plan_tier: "premium",
+    source: "website"
+  }
+});
+```
+
+Metadata is:
+- Included in all API responses
+- Sent in webhooks
+- Searchable via filters
+- Preserved across updates
+
+## Custom Field Data
+
+Custom field values collected at checkout are accessible:
+
+```typescript
+const subscription = await polar.subscriptions.get(subscriptionId);
+console.log(subscription.custom_field_data);
+// { [fieldId]: "customer response" }
+```
+
+## Filtering Subscriptions
+
+Query subscriptions with filters:
+
+```typescript
+const { items } = await polar.subscriptions.list({
+  organization_id: [orgId],
+  product_id: [productId],
+  customer_id: [customerId],
+  active: true,                    // Only active subs
+  cancel_at_period_end: false,     // Not set to cancel
+  metadata: { plan: "enterprise" }
+});
+```
+
+## Exporting Subscriptions
+
+Export subscription data as CSV:
+
+```typescript
+const response = await fetch(
+  'https://api.polar.sh/v1/subscriptions/export',
+  {
+    headers: {
+      Authorization: `Bearer ${apiKey}`
+    }
+  }
+);
+const csv = await response.text();
+```
+
+Includes:
+- Customer email
+- Creation date
+- Active status
+- Product name
+- Price and currency
+- Billing interval
+
+## Webhooks
+
+Listen for subscription events:
+
+<CardGroup cols={2}>
+  <Card title="subscription.created" icon="plus">
+    New subscription created
+  </Card>
+  <Card title="subscription.updated" icon="pen">
+    Subscription modified
+  </Card>
+  <Card title="subscription.active" icon="check">
+    Subscription became active
+  </Card>
+  <Card title="subscription.canceled" icon="xmark">
+    Subscription canceled
+  </Card>
+  <Card title="subscription.revoked" icon="ban">
+    Immediately revoked
+  </Card>
+  <Card title="subscription.ended" icon="flag">
+    Subscription ended
+  </Card>
+</CardGroup>
+
+## Subscription Locking
+
+Subscriptions are locked during updates to prevent race conditions:
+
+```typescript
+try {
+  await polar.subscriptions.update(subscriptionId, { seats: 10 });
+} catch (error) {
+  if (error.status === 409) {
+    // Subscription is locked by another operation
+    // Wait and retry
+  }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Cancellation Handling">
+    - Default to cancel at period end to maximize revenue
+    - Only offer immediate revocation when explicitly requested
+    - Track cancellation reasons via metadata
+  </Accordion>
+
+  <Accordion title="Upgrades & Downgrades">
+    - Use `create_prorations` for fair billing
+    - Preview charges before making changes
+    - Consider deferring downgrades to next billing cycle
+  </Accordion>
+
+  <Accordion title="Trial Management">
+    - Enable trials on products, not individual checkouts
+    - Track trial redemptions to prevent abuse
+    - Send notifications before trial ends
+  </Accordion>
+
+  <Accordion title="Usage Monitoring">
+    - Check meter consumption regularly for metered subscriptions
+    - Set up alerts for unusual usage patterns
+    - Use cap amounts to prevent surprise charges
+  </Accordion>
+
+  <Accordion title="Webhooks">
+    - Listen for subscription.updated to track changes
+    - Handle subscription.ended to revoke internal access
+    - Use idempotency keys for webhook handlers
+  </Accordion>
+</AccordionGroup>
+
+## Common Patterns
+
+### Free Trial to Paid
+
+```typescript
+// 1. Create subscription with trial via checkout
+const checkout = await polar.checkouts.custom.create({
+  products: [productId],
+  trial_interval: "day",
+  trial_interval_count: 14
+});
+
+// 2. Trial converts automatically when it ends
+// Listen for subscription.active webhook
+```
+
+### Self-Service Upgrades
+
+```typescript
+// Customer upgrades from Basic to Pro
+await polar.subscriptions.update(subscriptionId, {
+  product_id: proProductId,
+  proration_behavior: "create_prorations"
+});
+```
+
+### Pausing Subscriptions
+
+```typescript
+// Set a future end date
+await polar.subscriptions.update(subscriptionId, {
+  ends_at: "2024-07-01T00:00:00Z"
+});
+
+// Resume by removing end date
+await polar.subscriptions.update(subscriptionId, {
+  ends_at: null
+});
+```
+
+## API Reference
+
+<CardGroup cols={2}>
+  <Card title="List Subscriptions" icon="list" href="/api-reference/subscriptions">
+    Query subscriptions with filters
+  </Card>
+  <Card title="Get Subscription" icon="eye" href="/api-reference/subscriptions">
+    Retrieve subscription details
+  </Card>
+  <Card title="Create Subscription" icon="plus" href="/api-reference/subscriptions">
+    Create free subscription
+  </Card>
+  <Card title="Update Subscription" icon="pen" href="/api-reference/subscriptions">
+    Modify subscription
+  </Card>
+  <Card title="Revoke Subscription" icon="ban" href="/api-reference/subscriptions">
+    Cancel immediately
+  </Card>
+  <Card title="Charge Preview" icon="calculator" href="/api-reference/subscriptions">
+    Preview next charge
+  </Card>
+</CardGroup>

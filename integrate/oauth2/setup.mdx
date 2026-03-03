@@ -1,0 +1,348 @@
+---
+title: Creating an OAuth App
+description: Register your application and configure OAuth settings
+---
+
+Before you can authenticate users with Polar, you need to create an OAuth client application.
+
+## Creating a Client
+
+You can create OAuth clients via the API or using SDKs.
+
+### Via API
+
+```bash
+curl -X POST https://api.polar.sh/v1/oauth2/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "client_name": "My App",
+    "redirect_uris": ["https://example.com/auth/callback"],
+    "client_uri": "https://example.com",
+    "logo_uri": "https://example.com/logo.png",
+    "tos_uri": "https://example.com/terms",
+    "policy_uri": "https://example.com/privacy"
+  }'
+```
+
+### Via Python SDK
+
+```python
+import polar_sdk
+
+client = polar_sdk.Polar(
+    access_token="YOUR_ACCESS_TOKEN"  # Personal Access Token
+)
+
+oauth_client = client.oauth2.create_client(
+    client_name="My App",
+    redirect_uris=["https://example.com/auth/callback"],
+    client_uri="https://example.com",
+    logo_uri="https://example.com/logo.png",
+    tos_uri="https://example.com/terms",
+    policy_uri="https://example.com/privacy",
+    default_sub_type="organization",  # or "user"
+)
+
+print(f"Client ID: {oauth_client.client_id}")
+print(f"Client Secret: {oauth_client.client_secret}")
+```
+
+### Via TypeScript SDK
+
+```typescript
+import { Polar } from "@polar-sh/sdk";
+
+const polar = new Polar({
+  accessToken: process.env.POLAR_ACCESS_TOKEN,
+});
+
+const oauthClient = await polar.oauth2.create({
+  clientName: "My App",
+  redirectUris: ["https://example.com/auth/callback"],
+  clientUri: "https://example.com",
+  logoUri: "https://example.com/logo.png",
+  tosUri: "https://example.com/terms",
+  policyUri: "https://example.com/privacy",
+  defaultSubType: "organization",
+});
+
+console.log(`Client ID: ${oauthClient.clientId}`);
+console.log(`Client Secret: ${oauthClient.clientSecret}`);
+```
+
+<Warning>
+  **Save your client credentials immediately!** The `client_secret` is only shown once during creation. Store it securely in your environment variables.
+</Warning>
+
+## Client Configuration
+
+### Required Fields
+
+**`client_name`** (string)
+
+The name of your application shown to users during authorization.
+
+**`redirect_uris`** (array of strings)
+
+List of allowed URLs where users will be redirected after authorization. Must use HTTPS in production (HTTP allowed for localhost).
+
+Examples:
+```
+https://example.com/auth/callback
+http://localhost:3000/auth/callback
+http://127.0.0.1:8000/callback
+```
+
+### Optional Fields
+
+**`client_uri`** (string)
+
+URL to your application's homepage. Shown in the authorization screen.
+
+**`logo_uri`** (string)
+
+URL to your application's logo image. Displayed during authorization (recommended size: 200x200px).
+
+**`tos_uri`** (string)
+
+URL to your Terms of Service.
+
+**`policy_uri`** (string)
+
+URL to your Privacy Policy.
+
+**`default_sub_type`** ("user" | "organization")
+
+Default subject type for authorization requests. Defaults to `"organization"`.
+
+- `"user"` - Access user profile and organizations
+- `"organization"` - Access organization resources (products, orders, etc.)
+
+<Tip>
+  Use `"organization"` for most integrations that manage products, orders, or customers.
+</Tip>
+
+### Advanced Configuration
+
+**`token_endpoint_auth_method`** (string)
+
+How your app authenticates when requesting tokens:
+
+- `"client_secret_post"` (default) - Send credentials in request body
+- `"client_secret_basic"` - Send credentials in Authorization header (Basic auth)
+- `"none"` - Public clients (mobile, SPA) without secrets
+
+**`grant_types`** (array)
+
+Allowed OAuth grant types. Defaults to:
+```json
+["authorization_code", "refresh_token"]
+```
+
+**`response_types`** (array)
+
+Allowed response types. Defaults to:
+```json
+["code"]
+```
+
+**`scope`** (string)
+
+Default scopes requested if none are specified. Defaults to all available scopes.
+
+## Managing Clients
+
+### List Your Clients
+
+```python
+clients = client.oauth2.list()
+
+for oauth_client in clients.items:
+    print(f"{oauth_client.client_name}: {oauth_client.client_id}")
+```
+
+### Get Client Details
+
+```python
+oauth_client = client.oauth2.get(client_id="polar_ci_...")
+print(oauth_client.redirect_uris)
+```
+
+### Update a Client
+
+```python
+updated_client = client.oauth2.update(
+    client_id="polar_ci_...",
+    client_name="My App (Updated)",
+    redirect_uris=[
+        "https://example.com/auth/callback",
+        "https://staging.example.com/auth/callback",
+    ],
+    logo_uri="https://example.com/new-logo.png",
+)
+```
+
+<Note>
+  Updating `redirect_uris` immediately affects active authorization flows. Ensure your application is updated before changing redirect URIs in production.
+</Note>
+
+### Delete a Client
+
+```python
+client.oauth2.delete(client_id="polar_ci_...")
+```
+
+<Warning>
+  Deleting a client revokes all access tokens and refresh tokens issued to that client. Users will need to re-authorize your application.
+</Warning>
+
+## Security Considerations
+
+### Protecting Client Secrets
+
+✅ **Do:**
+- Store `client_secret` in environment variables
+- Use secret management services (AWS Secrets Manager, HashiCorp Vault)
+- Restrict access to secrets in your deployment pipeline
+- Rotate secrets periodically
+
+❌ **Don't:**
+- Commit secrets to version control
+- Expose secrets in client-side code
+- Log or display secrets
+- Share secrets in documentation or support tickets
+
+**Environment variable example:**
+```bash
+# .env
+POLAR_CLIENT_ID=polar_ci_...
+POLAR_CLIENT_SECRET=polar_cs_...
+```
+
+```python
+import os
+
+CLIENT_ID = os.environ["POLAR_CLIENT_ID"]
+CLIENT_SECRET = os.environ["POLAR_CLIENT_SECRET"]
+```
+
+### Redirect URI Security
+
+**Exact Match Required:** Polar validates redirect URIs exactly. These will fail:
+
+```
+Registered: https://example.com/callback
+
+❌ https://example.com/callback/    (trailing slash)
+❌ https://example.com/callback?code=123  (with query params)
+❌ http://example.com/callback     (wrong scheme)
+```
+
+**Wildcard subdomains are not supported:** Register each subdomain explicitly:
+
+```json
+{
+  "redirect_uris": [
+    "https://app.example.com/callback",
+    "https://app-staging.example.com/callback",
+    "https://app-dev.example.com/callback"
+  ]
+}
+```
+
+### Rate Limiting
+
+OAuth endpoints have rate limits:
+
+- **Client registration:** 10 per hour per user
+- **Authorization requests:** 60 per hour per client
+- **Token requests:** 100 per hour per client
+
+## Development vs Production
+
+### Separate Clients
+
+Create separate OAuth clients for development, staging, and production:
+
+```python
+# Development client
+dev_client = client.oauth2.create_client(
+    client_name="My App (Development)",
+    redirect_uris=["http://localhost:3000/callback"],
+)
+
+# Production client
+prod_client = client.oauth2.create_client(
+    client_name="My App",
+    redirect_uris=["https://example.com/callback"],
+)
+```
+
+### Environment Configuration
+
+```python
+import os
+
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+
+if ENVIRONMENT == "production":
+    CLIENT_ID = os.environ["POLAR_CLIENT_ID_PROD"]
+    CLIENT_SECRET = os.environ["POLAR_CLIENT_SECRET_PROD"]
+    REDIRECT_URI = "https://example.com/callback"
+else:
+    CLIENT_ID = os.environ["POLAR_CLIENT_ID_DEV"]
+    CLIENT_SECRET = os.environ["POLAR_CLIENT_SECRET_DEV"]
+    REDIRECT_URI = "http://localhost:3000/callback"
+```
+
+## Testing Your Client
+
+After creating a client, test the authorization flow:
+
+1. Build the authorization URL (see [OAuth Flow](/integrate/oauth2/connect))
+2. Open the URL in a browser
+3. You should see Polar's authorization screen with your app's name and logo
+4. Approve the authorization
+5. You should be redirected to your `redirect_uri` with a `code` parameter
+
+If you encounter issues:
+
+- Check that `client_id` and `redirect_uri` exactly match your registered values
+- Ensure `redirect_uri` uses HTTPS (or localhost)
+- Verify your scopes are valid (see [Available Scopes](/integrate/oauth2/introduction#available-scopes))
+
+## Client Metadata Response
+
+When you create a client, Polar returns:
+
+```json
+{
+  "client_id": "polar_ci_...",
+  "client_secret": "polar_cs_...",
+  "client_id_issued_at": 1234567890,
+  "client_secret_expires_at": 0,
+  "client_name": "My App",
+  "client_uri": "https://example.com",
+  "logo_uri": "https://example.com/logo.png",
+  "redirect_uris": ["https://example.com/callback"],
+  "token_endpoint_auth_method": "client_secret_post",
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "scope": "openid profile email products:read orders:read ..."
+}
+```
+
+<Note>
+  `client_secret_expires_at` is always `0` - secrets don't expire automatically, but you should rotate them periodically.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Implement OAuth Flow" icon="arrows-rotate" href="/integrate/oauth2/connect">
+    Build the authorization code flow in your app
+  </Card>
+  <Card title="OAuth Overview" icon="book" href="/integrate/oauth2/introduction">
+    Learn about OAuth concepts and best practices
+  </Card>
+</CardGroup>

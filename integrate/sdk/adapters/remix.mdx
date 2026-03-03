@@ -1,0 +1,458 @@
+---
+title: "Remix Adapter"
+description: "Integrate Polar SDK into your Remix application"
+icon: "music"
+---
+
+Integrate Polar into your Remix application using loaders, actions, and server-side utilities.
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install @polar-sh/sdk
+```
+
+```bash pnpm
+pnpm add @polar-sh/sdk
+```
+
+```bash yarn
+yarn add @polar-sh/sdk
+```
+
+</CodeGroup>
+
+## Setup
+
+<Steps>
+
+<Step title="Configure environment variables">
+  Add your Polar credentials to `.env`:
+
+  ```bash .env
+  POLAR_ACCESS_TOKEN=your_access_token_here
+  POLAR_SERVER_URL=https://api.polar.sh
+  ```
+
+  <Warning>
+    Never expose your access token to the client. Use server-only environment variables.
+  </Warning>
+</Step>
+
+<Step title="Create Polar utility">
+  Create a server-side utility for the Polar client:
+
+  ```typescript app/lib/polar.server.ts
+  import { PolarCore } from '@polar-sh/sdk/core'
+
+  export function getPolarClient() {
+    if (!process.env.POLAR_ACCESS_TOKEN) {
+      throw new Error('POLAR_ACCESS_TOKEN is not set')
+    }
+
+    return new PolarCore({
+      serverURL: process.env.POLAR_SERVER_URL || 'https://api.polar.sh',
+      security: {
+        bearerAuth: process.env.POLAR_ACCESS_TOKEN,
+      },
+    })
+  }
+
+  export function getPublicPolarClient() {
+    return new PolarCore({
+      serverURL: process.env.POLAR_SERVER_URL || 'https://api.polar.sh',
+    })
+  }
+  ```
+
+  <Note>
+    The `.server.ts` suffix ensures this module is only bundled for the server.
+  </Note>
+</Step>
+
+<Step title="Use in loaders">
+  Fetch data in your route loaders:
+
+  ```typescript app/routes/products._index.tsx
+  import { json, type LoaderFunctionArgs } from '@remix-run/node'
+  import { useLoaderData } from '@remix-run/react'
+  import { getPolarClient } from '~/lib/polar.server'
+  import { productsSearch } from '@polar-sh/sdk/funcs/productsSearch'
+
+  export async function loader({ request }: LoaderFunctionArgs) {
+    const client = getPolarClient()
+    const { ok, value: products } = await productsSearch(client, {
+      organizationId: 'your-org-id',
+    })
+
+    if (!ok || !products) {
+      throw new Response('Failed to load products', { status: 500 })
+    }
+
+    return json({ products: products.items })
+  }
+
+  export default function ProductsPage() {
+    const { products } = useLoaderData<typeof loader>()
+
+    return (
+      <div>
+        <h1>Products</h1>
+        <div>
+          {products.map((product) => (
+            <div key={product.id}>
+              <h2>{product.name}</h2>
+              <p>{product.description}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+  ```
+</Step>
+
+</Steps>
+
+## Route Actions
+
+Handle form submissions and mutations with actions:
+
+```typescript app/routes/checkout.tsx
+import { json, redirect, type ActionFunctionArgs } from '@remix-run/node'
+import { Form, useActionData, useNavigation } from '@remix-run/react'
+import { getPolarClient } from '~/lib/polar.server'
+import { checkoutsCreate } from '@polar-sh/sdk/funcs/checkoutsCreate'
+
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData()
+  const productId = formData.get('productId') as string
+
+  const client = getPolarClient()
+  const { ok, value: checkout, error } = await checkoutsCreate(client, {
+    productId,
+    successUrl: `${new URL(request.url).origin}/success`,
+  })
+
+  if (!ok) {
+    return json(
+      { error: error?.message || 'Failed to create checkout' },
+      { status: 400 }
+    )
+  }
+
+  return redirect(checkout.url)
+}
+
+export default function CheckoutPage() {
+  const actionData = useActionData<typeof action>()
+  const navigation = useNavigation()
+  const isSubmitting = navigation.state === 'submitting'
+
+  return (
+    <div>
+      <h1>Checkout</h1>
+      {actionData?.error && (
+        <div className="error">{actionData.error}</div>
+      )}
+      <Form method="post">
+        <input type="hidden" name="productId" value="prod_123" />
+        <button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? 'Processing...' : 'Buy Now'}
+        </button>
+      </Form>
+    </div>
+  )
+}
+```
+
+## Dynamic Routes
+
+Load individual products with dynamic segments:
+
+```typescript app/routes/products.$id.tsx
+import { json, type LoaderFunctionArgs } from '@remix-run/node'
+import { useLoaderData } from '@remix-run/react'
+import { getPolarClient } from '~/lib/polar.server'
+import { productsGet } from '@polar-sh/sdk/funcs/productsGet'
+
+export async function loader({ params }: LoaderFunctionArgs) {
+  const { id } = params
+
+  if (!id) {
+    throw new Response('Product ID is required', { status: 400 })
+  }
+
+  const client = getPolarClient()
+  const { ok, value: product } = await productsGet(client, { id })
+
+  if (!ok || !product) {
+    throw new Response('Product not found', { status: 404 })
+  }
+
+  return json({ product })
+}
+
+export default function ProductPage() {
+  const { product } = useLoaderData<typeof loader>()
+
+  return (
+    <div>
+      <h1>{product.name}</h1>
+      <p>{product.description}</p>
+      <Form method="post" action="/checkout">
+        <input type="hidden" name="productId" value={product.id} />
+        <button type="submit">Buy Now</button>
+      </Form>
+    </div>
+  )
+}
+```
+
+## Resource Routes
+
+Create API endpoints with resource routes:
+
+```typescript app/routes/api.webhooks.polar.tsx
+import { json, type ActionFunctionArgs } from '@remix-run/node'
+import { getPolarClient } from '~/lib/polar.server'
+import { webhooksValidatePayload } from '@polar-sh/sdk/funcs/webhooksValidatePayload'
+
+export async function action({ request }: ActionFunctionArgs) {
+  if (request.method !== 'POST') {
+    throw new Response('Method not allowed', { status: 405 })
+  }
+
+  const signature = request.headers.get('webhook-signature')
+  const body = await request.text()
+
+  if (!signature) {
+    return json({ error: 'Missing signature' }, { status: 401 })
+  }
+
+  const client = getPolarClient()
+  const { ok, value: event } = await webhooksValidatePayload(client, {
+    webhookSignatureHeader: signature,
+    payload: body,
+  })
+
+  if (!ok) {
+    return json({ error: 'Invalid signature' }, { status: 401 })
+  }
+
+  // Handle the webhook event
+  switch (event.type) {
+    case 'checkout.completed':
+      console.log('Checkout completed:', event.data)
+      break
+    case 'subscription.created':
+      console.log('Subscription created:', event.data)
+      break
+    default:
+      console.log('Unhandled event type:', event.type)
+  }
+
+  return json({ received: true })
+}
+```
+
+## Error Handling
+
+Use error boundaries for robust error handling:
+
+```typescript app/routes/products.$id.tsx
+import { json, type LoaderFunctionArgs } from '@remix-run/node'
+import { useRouteError, isRouteErrorResponse } from '@remix-run/react'
+import { getPolarClient } from '~/lib/polar.server'
+import { productsGet } from '@polar-sh/sdk/funcs/productsGet'
+import { ResourceNotFound } from '@polar-sh/sdk/models/errors/resourcenotfound'
+
+export async function loader({ params }: LoaderFunctionArgs) {
+  try {
+    const client = getPolarClient()
+    const { ok, value: product, error } = await productsGet(client, {
+      id: params.id!,
+    })
+
+    if (!ok) {
+      if (error instanceof ResourceNotFound) {
+        throw new Response('Product not found', { status: 404 })
+      }
+      throw new Response('Failed to load product', { status: 500 })
+    }
+
+    return json({ product })
+  } catch (error) {
+    throw new Response('An unexpected error occurred', { status: 500 })
+  }
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError()
+
+  if (isRouteErrorResponse(error)) {
+    return (
+      <div>
+        <h1>{error.status} {error.statusText}</h1>
+        <p>{error.data}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <h1>Error</h1>
+      <p>An unexpected error occurred</p>
+    </div>
+  )
+}
+```
+
+## Session Management
+
+Integrate Polar with Remix sessions:
+
+```typescript app/lib/session.server.ts
+import { createCookieSessionStorage } from '@remix-run/node'
+import { getPolarClient } from './polar.server'
+import { customersGet } from '@polar-sh/sdk/funcs/customersGet'
+
+const { getSession, commitSession, destroySession } =
+  createCookieSessionStorage({
+    cookie: {
+      name: '__polar_session',
+      httpOnly: true,
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: '/',
+      sameSite: 'lax',
+      secrets: [process.env.SESSION_SECRET!],
+      secure: process.env.NODE_ENV === 'production',
+    },
+  })
+
+export async function getCustomerFromSession(request: Request) {
+  const session = await getSession(request.headers.get('Cookie'))
+  const customerId = session.get('customerId')
+
+  if (!customerId) {
+    return null
+  }
+
+  const client = getPolarClient()
+  const { ok, value: customer } = await customersGet(client, {
+    id: customerId,
+  })
+
+  return ok ? customer : null
+}
+
+export { getSession, commitSession, destroySession }
+```
+
+Use it in your loader:
+
+```typescript app/routes/_index.tsx
+import { json, type LoaderFunctionArgs } from '@remix-run/node'
+import { useLoaderData } from '@remix-run/react'
+import { getCustomerFromSession } from '~/lib/session.server'
+
+export async function loader({ request }: LoaderFunctionArgs) {
+  const customer = await getCustomerFromSession(request)
+
+  return json({ customer })
+}
+
+export default function Index() {
+  const { customer } = useLoaderData<typeof loader>()
+
+  return (
+    <div>
+      {customer ? (
+        <p>Welcome back, {customer.email}!</p>
+      ) : (
+        <p>Welcome! Please sign in.</p>
+      )}
+    </div>
+  )
+}
+```
+
+## Meta Function
+
+Generate SEO metadata from Polar data:
+
+```typescript app/routes/products.$id.tsx
+import { json, type LoaderFunctionArgs, type MetaFunction } from '@remix-run/node'
+import { getPolarClient } from '~/lib/polar.server'
+import { productsGet } from '@polar-sh/sdk/funcs/productsGet'
+
+export const meta: MetaFunction<typeof loader> = ({ data }) => {
+  if (!data?.product) {
+    return [{ title: 'Product Not Found' }]
+  }
+
+  return [
+    { title: data.product.name },
+    { name: 'description', content: data.product.description || '' },
+  ]
+}
+
+export async function loader({ params }: LoaderFunctionArgs) {
+  const client = getPolarClient()
+  const { ok, value: product } = await productsGet(client, {
+    id: params.id!,
+  })
+
+  if (!ok || !product) {
+    throw new Response('Not found', { status: 404 })
+  }
+
+  return json({ product })
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+
+<Card title="Server-side only" icon="server">
+  Use `.server.ts` suffix for files with sensitive operations.
+</Card>
+
+<Card title="Error boundaries" icon="shield">
+  Implement error boundaries for graceful error handling.
+</Card>
+
+<Card title="Progressive enhancement" icon="bolt">
+  Use Remix Forms for JavaScript-free functionality.
+</Card>
+
+<Card title="Type safety" icon="code">
+  Leverage TypeScript for better developer experience.
+</Card>
+
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="Checkout" icon="shopping-cart" href="/features/checkout">
+  Implement Polar Checkout in your Remix app.
+</Card>
+
+<Card title="Webhooks" icon="webhook" href="/integrate/webhooks/endpoints">
+  Set up webhook handlers for real-time events.
+</Card>
+
+<Card title="TypeScript SDK" icon="code" href="/integrate/sdk/typescript">
+  Explore the full TypeScript SDK.
+</Card>
+
+<Card title="API Reference" icon="book" href="/api-reference/introduction">
+  Browse the complete API reference.
+</Card>
+
+</CardGroup>

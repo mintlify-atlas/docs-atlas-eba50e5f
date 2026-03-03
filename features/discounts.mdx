@@ -1,0 +1,208 @@
+---
+title: Discount Codes and Promotions
+description: Create and manage discount codes for your products and subscriptions
+---
+
+Discount codes allow you to offer promotional pricing to your customers. They can be applied during checkout either by customers entering a code or programmatically via the API.
+
+## Discount Types
+
+Polar supports two types of discounts:
+
+<CardGroup cols={2}>
+  <Card title="Fixed Amount" icon="dollar-sign">
+    Discount a specific amount in a given currency (e.g., $10 off)
+  </Card>
+  <Card title="Percentage" icon="percent">
+    Discount a percentage of the total (e.g., 25% off)
+  </Card>
+</CardGroup>
+
+## Duration Options
+
+For subscription products, you can control how long the discount applies:
+
+- **Once**: Applied only to the first invoice
+- **Forever**: Applied to every invoice for the lifetime of the subscription
+- **Repeating**: Applied for a specific number of months (e.g., 3 months)
+
+<Note>
+For one-time purchases, discounts are always applied once.
+</Note>
+
+## Creating a Discount
+
+<Steps>
+  <Step title="Navigate to Discounts">
+    Go to your organization dashboard and select **Sales** > **Discounts**.
+  </Step>
+  
+  <Step title="Configure the Discount">
+    Set the discount type, amount, and duration:
+    
+    ```json Example: 25% off for 3 months
+    {
+      "name": "New Customer Promo",
+      "code": "WELCOME25",
+      "type": "percentage",
+      "basis_points": 2500,
+      "duration": "repeating",
+      "duration_in_months": 3
+    }
+    ```
+  </Step>
+  
+  <Step title="Set Restrictions (Optional)">
+    - **Products**: Limit to specific products
+    - **Start Date**: When the discount becomes active
+    - **End Date**: When the discount expires
+    - **Max Redemptions**: Limit total uses
+  </Step>
+  
+  <Step title="Create the Discount">
+    Click **Create** to make the discount code available.
+  </Step>
+</Steps>
+
+## Discount Codes
+
+Discount codes must be:
+- Between 3 and 256 characters
+- Alphanumeric only (letters and numbers)
+- Case-insensitive (WELCOME25 = welcome25)
+
+<Warning>
+If you don't provide a code, the discount can only be applied programmatically via the API.
+</Warning>
+
+## Applying Discounts
+
+### At Checkout
+
+Customers can enter discount codes in the checkout form. The discount is validated and applied automatically:
+
+- Product restrictions are checked
+- Currency compatibility is verified (for fixed amount discounts)
+- Redemption limits are enforced
+- Date restrictions are validated
+
+### Via API
+
+Apply discounts programmatically when creating checkouts:
+
+```typescript
+const checkout = await polar.checkouts.create({
+  productPriceId: 'price_xxx',
+  discountId: 'discount_xxx',  // or
+  discountCode: 'WELCOME25'
+});
+```
+
+## Redemption Tracking
+
+Polar automatically tracks discount redemptions:
+
+- **Redemptions Count**: Total times the discount has been used
+- **Max Redemptions**: Optional limit on total uses
+- **Concurrency Protection**: Row-level locking prevents over-redemption
+
+<Note>
+When a discount reaches its maximum redemptions, it automatically becomes unavailable.
+</Note>
+
+## Updating Discounts
+
+You can update most discount properties after creation:
+
+✅ **Can Update**:
+- Name
+- Code (if not duplicate)
+- Start/end dates
+- Max redemptions
+- Product restrictions
+
+❌ **Cannot Update**:
+- Type (fixed vs percentage)
+- Duration (once/forever/repeating)
+- Amount/percentage (after first redemption)
+
+<Warning>
+Once a discount has been redeemed, you cannot change the discount amount to protect customer pricing consistency.
+</Warning>
+
+## Metadata
+
+Attach custom metadata to discounts for tracking:
+
+```json
+{
+  "metadata": {
+    "campaign": "summer_2024",
+    "source": "email_newsletter"
+  }
+}
+```
+
+## Basis Points Explained
+
+Percentage discounts use basis points (1/100th of a percent):
+
+- 10% = 1000 basis points
+- 25.5% = 2550 basis points
+- 100% = 10000 basis points (maximum)
+
+```json Example: 15% discount
+{
+  "type": "percentage",
+  "basis_points": 1500
+}
+```
+
+## Fixed Amount Discounts
+
+Fixed amount discounts require a currency:
+
+```json Example: $10 off
+{
+  "type": "fixed",
+  "amount": 1000,
+  "currency": "usd"
+}
+```
+
+<Note>
+Amounts are always in cents (or smallest currency unit). $10 = 1000 cents.
+</Note>
+
+### Currency Compatibility
+
+Fixed amount discounts only apply to products with matching currency. If a customer's checkout uses a different currency, the discount will not be valid.
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Descriptive Codes" icon="tag">
+    Make codes memorable and relevant: SUMMER2024, EARLYBIRD, STUDENT20
+  </Card>
+  
+  <Card title="Set Expiration Dates" icon="calendar">
+    Create urgency with time-limited offers
+  </Card>
+  
+  <Card title="Track with Metadata" icon="chart-line">
+    Use metadata to track campaign performance
+  </Card>
+  
+  <Card title="Limit Redemptions" icon="shield">
+    Prevent abuse with max redemption limits
+  </Card>
+</CardGroup>
+
+## API Reference
+
+See the full API documentation:
+
+- [Create Discount](/api-reference/discounts/create)
+- [Update Discount](/api-reference/discounts/update)
+- [List Discounts](/api-reference/discounts/list)
+- [Delete Discount](/api-reference/discounts/delete)

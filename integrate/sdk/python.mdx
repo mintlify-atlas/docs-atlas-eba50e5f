@@ -1,0 +1,178 @@
+---
+title: "Python SDK"
+sidebarTitle: "Python"
+icon: python
+---
+
+Fully type-hinted and allows both synchronous and asynchronous usage, thanks to [HTTPX](https://www.python-httpx.org/).
+Under the hood, schemas are validated by [Pydantic](https://docs.pydantic.dev/latest/).
+
+## Installation
+
+```bash Terminal
+pip install polar-sdk
+```
+
+## Quickstart
+
+### Synchronous Usage
+
+```python
+from polar_sdk import Polar
+
+s = Polar(
+    access_token="<YOUR_BEARER_TOKEN_HERE>",
+)
+
+res = s.users.benefits.list()
+
+if res is not None:
+    while True:
+        # handle items
+        for item in res.items:
+            print(item)
+
+        res = res.Next()
+        if res is None:
+            break
+```
+
+### Asynchronous Usage
+
+```python
+import asyncio
+from polar_sdk import Polar
+
+async def main():
+    s = Polar(
+        access_token="<YOUR_BEARER_TOKEN_HERE>",
+    )
+
+    res = await s.users.benefits.list_async()
+
+    if res is not None:
+        while True:
+            # handle items
+            for item in res.items:
+                print(item)
+
+            res = await res.Next()
+            if res is None:
+                break
+
+asyncio.run(main())
+```
+
+## Authentication
+
+The SDK requires an **Organization Access Token** for authentication. You can generate one from your organization's settings in the Polar dashboard.
+
+```python
+from polar_sdk import Polar
+
+s = Polar(
+    access_token="<YOUR_BEARER_TOKEN_HERE>",
+)
+```
+
+## Common Operations
+
+### Create a Checkout Session
+
+Create a checkout session to accept payments:
+
+```python
+from polar_sdk import Polar
+from polar_sdk.models import operations
+
+s = Polar(
+    access_token="<YOUR_BEARER_TOKEN_HERE>",
+)
+
+checkout = s.checkouts.create(
+    products=["prod_xxxxxxxxxxxxx"],
+    success_url="https://myapp.com/success",
+    return_url="https://myapp.com"
+)
+
+# Redirect user to checkout.url
+print(checkout.url)
+```
+
+### Get Customer State
+
+Retrieve a customer's active subscriptions and benefits using their external ID:
+
+```python
+from polar_sdk import Polar
+
+s = Polar(
+    access_token="<YOUR_BEARER_TOKEN_HERE>",
+)
+
+customer_state = s.customers.get_state_external(
+    external_customer_id="user_123"
+)
+
+print(customer_state.granted_benefits)
+print(customer_state.subscriptions)
+```
+
+### List Products
+
+Get all products for an organization:
+
+```python
+from polar_sdk import Polar
+
+s = Polar(
+    access_token="<YOUR_BEARER_TOKEN_HERE>",
+)
+
+res = s.products.list(
+    organization_id="org_xxxxxxxxxxxxx"
+)
+
+if res is not None:
+    while True:
+        # handle items
+        for product in res.items:
+            print(product.name)
+
+        res = res.Next()
+        if res is None:
+            break
+```
+
+### Handle Pagination
+
+The SDK automatically handles pagination for list endpoints:
+
+```python
+res = s.users.benefits.list()
+
+if res is not None:
+    while True:
+        # Process each page of results
+        for benefit in res.items:
+            print(benefit.id)
+
+        res = res.Next()
+        if res is None:
+            break
+```
+
+## Sandbox Environment
+
+You can configure the SDK so it hits the [sandbox environment](/integrate/sandbox) instead of the production one. You just need to add the `server` argument when instantiating the client:
+
+```python
+s = Polar(
+    server="sandbox",
+    access_token="<YOUR_BEARER_TOKEN_HERE>",
+)
+```
+
+## Learn More
+
+[Read more on GitHub](https://github.com/polarsource/polar-python)

@@ -1,0 +1,347 @@
+---
+title: 'Subscriptions'
+description: 'Customer-facing endpoints for viewing and managing subscriptions'
+---
+
+Customers can view their active and past subscriptions, update subscription plans, adjust seat counts, and cancel subscriptions through the Customer Portal API.
+
+## List Subscriptions
+
+Retrieve all subscriptions for the authenticated customer.
+
+```bash
+GET /v1/customer-portal/subscriptions
+```
+
+### Query Parameters
+
+<ParamField query="product_id" type="string[]">
+  Filter by product ID(s).
+</ParamField>
+
+<ParamField query="active" type="boolean">
+  Filter by active (`true`) or cancelled (`false`) status.
+</ParamField>
+
+<ParamField query="query" type="string">
+  Search by product or organization name.
+</ParamField>
+
+<ParamField query="limit" type="number" default="10">
+  Number of results per page (max 100).
+</ParamField>
+
+<ParamField query="page" type="number" default="1">
+  Page number for pagination.
+</ParamField>
+
+### Response
+
+<ResponseField name="items" type="Subscription[]">
+  Array of subscription objects.
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  Pagination metadata with `total_count` and `page`.
+</ResponseField>
+
+### Example
+
+```bash
+curl https://api.polar.sh/v1/customer-portal/subscriptions?active=true \
+  -H "Authorization: Bearer polar_cst_..."
+```
+
+**Response:**
+```json
+{
+  "items": [
+    {
+      "id": "sub_1a2b3c4d",
+      "status": "active",
+      "started_at": "2024-01-01T00:00:00Z",
+      "current_period_start": "2024-02-01T00:00:00Z",
+      "current_period_end": "2024-03-01T00:00:00Z",
+      "cancel_at_period_end": false,
+      "ended_at": null,
+      "product": {
+        "id": "prod_abc123",
+        "name": "Pro Plan",
+        "description": "Professional features",
+        "organization": {
+          "id": "org_xyz",
+          "name": "Acme Inc",
+          "slug": "acme"
+        },
+        "prices": [{
+          "id": "price_123",
+          "amount": 2900,
+          "currency": "USD",
+          "recurring_interval": "month"
+        }],
+        "benefits": [],
+        "medias": []
+      },
+      "prices": [{
+        "id": "price_123",
+        "amount": 2900,
+        "currency": "USD",
+        "recurring_interval": "month"
+      }],
+      "amount": 2900,
+      "currency": "USD",
+      "recurring_interval": "month",
+      "seats": 1,
+      "meters": []
+    }
+  ],
+  "pagination": {
+    "total_count": 1,
+    "page": 1
+  }
+}
+```
+
+## Get Subscription
+
+Retrieve a single subscription by ID.
+
+```bash
+GET /v1/customer-portal/subscriptions/{id}
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The subscription ID.
+</ParamField>
+
+### Response
+
+Returns a subscription object with full details including product, pricing, and benefits.
+
+### Example
+
+```bash
+curl https://api.polar.sh/v1/customer-portal/subscriptions/sub_1a2b3c4d \
+  -H "Authorization: Bearer polar_cst_..."
+```
+
+## Preview Next Charge
+
+Get a preview of the upcoming charge for an active subscription, including metered usage.
+
+```bash
+GET /v1/customer-portal/subscriptions/{id}/charge-preview
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The subscription ID.
+</ParamField>
+
+### Response
+
+<ResponseField name="amount" type="number">
+  Total amount to be charged (in cents).
+</ResponseField>
+
+<ResponseField name="currency" type="string">
+  Currency code (USD, EUR, etc.).
+</ResponseField>
+
+<ResponseField name="line_items" type="array">
+  Breakdown of charges including base price and metered usage.
+</ResponseField>
+
+<ResponseField name="period_start" type="string">
+  Start of the billing period.
+</ResponseField>
+
+<ResponseField name="period_end" type="string">
+  End of the billing period.
+</ResponseField>
+
+### Example
+
+```bash
+curl https://api.polar.sh/v1/customer-portal/subscriptions/sub_1a2b3c4d/charge-preview \
+  -H "Authorization: Bearer polar_cst_..."
+```
+
+**Response:**
+```json
+{
+  "amount": 4200,
+  "currency": "USD",
+  "period_start": "2024-02-01T00:00:00Z",
+  "period_end": "2024-03-01T00:00:00Z",
+  "line_items": [
+    {
+      "description": "Pro Plan",
+      "amount": 2900,
+      "quantity": 1
+    },
+    {
+      "description": "API Usage (1,300 requests)",
+      "amount": 1300,
+      "quantity": 1300
+    }
+  ]
+}
+```
+
+<Note>
+  Charge previews are only available for active subscriptions with an upcoming renewal.
+</Note>
+
+## Update Subscription
+
+Modify a subscription's plan, seats, or cancellation status.
+
+```bash
+PATCH /v1/customer-portal/subscriptions/{id}
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The subscription ID.
+</ParamField>
+
+### Request Body
+
+The request body can contain one of the following update types:
+
+**Switch Product:**
+<ParamField body="product_id" type="string">
+  ID of the product to switch to (upgrade/downgrade).
+</ParamField>
+
+**Update Seats:**
+<ParamField body="seats" type="number">
+  New seat count (minimum 1).
+</ParamField>
+
+<ParamField body="proration_behavior" type="string">
+  How to handle prorations: `create_prorations` (default) or `always_invoice`.
+</ParamField>
+
+**Cancel Subscription:**
+<ParamField body="cancel_at_period_end" type="boolean">
+  Set to `true` to cancel at period end, `false` to uncancel.
+</ParamField>
+
+<ParamField body="cancellation_reason" type="string">
+  Reason for cancellation: `too_expensive`, `missing_features`, `switched_service`, `unused`, `customer_service`, `low_quality`, `too_complex`, or `other`.
+</ParamField>
+
+<ParamField body="cancellation_comment" type="string">
+  Free-form feedback about why the customer is canceling.
+</ParamField>
+
+### Examples
+
+**Switch to Different Product:**
+```bash
+curl -X PATCH https://api.polar.sh/v1/customer-portal/subscriptions/sub_1a2b3c4d \
+  -H "Authorization: Bearer polar_cst_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product_id": "prod_enterprise123"
+  }'
+```
+
+**Update Seat Count:**
+```bash
+curl -X PATCH https://api.polar.sh/v1/customer-portal/subscriptions/sub_1a2b3c4d \
+  -H "Authorization: Bearer polar_cst_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "seats": 5,
+    "proration_behavior": "create_prorations"
+  }'
+```
+
+**Cancel at Period End:**
+```bash
+curl -X PATCH https://api.polar.sh/v1/customer-portal/subscriptions/sub_1a2b3c4d \
+  -H "Authorization: Bearer polar_cst_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cancel_at_period_end": true,
+    "cancellation_reason": "too_expensive",
+    "cancellation_comment": "Need to reduce costs this quarter"
+  }'
+```
+
+<Warning>
+  Subscription updates require the organization to enable customer-initiated changes. If disabled, you'll receive a 403 error.
+</Warning>
+
+## Cancel Subscription
+
+Immediately cancel a subscription (alternative to setting `cancel_at_period_end`).
+
+```bash
+DELETE /v1/customer-portal/subscriptions/{id}
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The subscription ID.
+</ParamField>
+
+### Response
+
+Returns the updated subscription object with `cancel_at_period_end` set to `true`.
+
+### Example
+
+```bash
+curl -X DELETE https://api.polar.sh/v1/customer-portal/subscriptions/sub_1a2b3c4d \
+  -H "Authorization: Bearer polar_cst_..."
+```
+
+<Note>
+  This sets the subscription to cancel at the end of the current billing period. The customer retains access until then.
+</Note>
+
+## Permissions
+
+Subscription management requires appropriate permissions:
+
+- **List/Get**: Any authenticated customer or member
+- **Update/Cancel**: Customer or member with `billing_manager` or `owner` role
+
+Attempting to update or cancel without permission returns:
+
+```json
+{
+  "error": "not_permitted",
+  "detail": "Only owners and billing managers can access billing features."
+}
+```
+
+## Subscription States
+
+Subscriptions can be in the following states:
+
+- **active**: Currently active and renewing
+- **trialing**: In trial period
+- **canceled**: Set to cancel at period end (still active)
+- **past_due**: Payment failed, retrying
+- **unpaid**: Payment failed permanently
+- **incomplete**: Initial payment not completed
+- **incomplete_expired**: Initial payment expired
+
+## Proration Behavior
+
+When updating seats or switching products mid-cycle, you can control how prorations are handled:
+
+- **create_prorations** (default): Creates credit for unused time and charges for new time
+- **always_invoice**: Immediately invoices any additional charges
+
+The organization's default proration setting is used if not specified.

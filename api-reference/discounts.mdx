@@ -1,0 +1,282 @@
+---
+title: Discounts
+description: Create and manage discount codes
+---
+
+## Overview
+
+Discounts allow you to offer promotional pricing to customers through discount codes or automatic discounts.
+
+## The Discount Object
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the discount
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Discount name
+</ResponseField>
+
+<ResponseField name="code" type="string">
+  Discount code (for code-based discounts)
+</ResponseField>
+
+<ResponseField name="type" type="enum" required>
+  Type: `percentage` or `fixed`
+</ResponseField>
+
+<ResponseField name="amount" type="integer" required>
+  Discount amount (percentage or cents based on type)
+</ResponseField>
+
+<ResponseField name="currency" type="string">
+  Currency (for fixed discounts)
+</ResponseField>
+
+<ResponseField name="redemptions_limit" type="integer">
+  Maximum number of redemptions (null for unlimited)
+</ResponseField>
+
+<ResponseField name="redemptions_count" type="integer" required>
+  Current number of redemptions
+</ResponseField>
+
+<ResponseField name="max_redemptions_per_customer" type="integer">
+  Max uses per customer (null for unlimited)
+</ResponseField>
+
+<ResponseField name="starts_at" type="string">
+  When discount becomes active
+</ResponseField>
+
+<ResponseField name="ends_at" type="string">
+  When discount expires
+</ResponseField>
+
+<ResponseField name="organization_id" type="string" required>
+  Organization ID
+</ResponseField>
+
+<ResponseField name="products" type="array">
+  Applicable products (empty for all)
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  Creation timestamp
+</ResponseField>
+
+---
+
+## List Discounts
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/discounts" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Query Parameters
+
+<ParamField query="organization_id" type="string">
+  Filter by organization
+</ParamField>
+
+<ParamField query="query" type="string">
+  Filter by name
+</ParamField>
+
+---
+
+## Get Discount
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/discounts/{id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Discount ID
+</ParamField>
+
+---
+
+## Create Discount
+
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/discounts" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Summer Sale",
+    "code": "SUMMER20",
+    "type": "percentage",
+    "amount": 20,
+    "redemptions_limit": 100,
+    "organization_id": "org_123"
+  }'
+```
+
+### Request Body
+
+<ParamField body="name" type="string" required>
+  Discount name
+</ParamField>
+
+<ParamField body="code" type="string">
+  Discount code (leave empty for automatic discount)
+</ParamField>
+
+<ParamField body="type" type="enum" required>
+  Discount type: `percentage` or `fixed`
+</ParamField>
+
+<ParamField body="amount" type="integer" required>
+  For percentage: 1-100. For fixed: amount in cents
+</ParamField>
+
+<ParamField body="currency" type="string">
+  Currency (required for fixed discounts)
+</ParamField>
+
+<ParamField body="redemptions_limit" type="integer">
+  Total redemption limit
+</ParamField>
+
+<ParamField body="max_redemptions_per_customer" type="integer">
+  Per-customer limit
+</ParamField>
+
+<ParamField body="starts_at" type="string">
+  Start date (ISO 8601)
+</ParamField>
+
+<ParamField body="ends_at" type="string">
+  End date (ISO 8601)
+</ParamField>
+
+<ParamField body="products" type="array">
+  Product IDs (empty for all products)
+</ParamField>
+
+<ParamField body="organization_id" type="string">
+  Organization ID (required unless using org token)
+</ParamField>
+
+---
+
+## Update Discount
+
+```bash cURL
+curl -X PATCH "https://api.polar.sh/v1/discounts/{id}" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "redemptions_limit": 200
+  }'
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Discount ID
+</ParamField>
+
+### Request Body
+
+All fields optional.
+
+<ParamField body="name" type="string">
+  Update name
+</ParamField>
+
+<ParamField body="redemptions_limit" type="integer">
+  Update total limit
+</ParamField>
+
+<ParamField body="ends_at" type="string">
+  Update expiration date
+</ParamField>
+
+---
+
+## Delete Discount
+
+```bash cURL
+curl -X DELETE "https://api.polar.sh/v1/discounts/{id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Discount ID
+</ParamField>
+
+---
+
+## Examples
+
+### Create Percentage Discount
+
+```bash
+curl -X POST "https://api.polar.sh/v1/discounts" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "20% Off",
+    "code": "SAVE20",
+    "type": "percentage",
+    "amount": 20,
+    "organization_id": "org_123"
+  }'
+```
+
+### Create Fixed Amount Discount
+
+```bash
+curl -X POST "https://api.polar.sh/v1/discounts" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "$10 Off",
+    "code": "TEN",
+    "type": "fixed",
+    "amount": 1000,
+    "currency": "USD",
+    "organization_id": "org_123"
+  }'
+```
+
+### Time-Limited Discount
+
+```bash
+curl -X POST "https://api.polar.sh/v1/discounts" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Flash Sale",
+    "code": "FLASH24",
+    "type": "percentage",
+    "amount": 30,
+    "starts_at": "2024-03-01T00:00:00Z",
+    "ends_at": "2024-03-02T00:00:00Z",
+    "organization_id": "org_123"
+  }'
+```
+
+### Product-Specific Discount
+
+```bash
+curl -X POST "https://api.polar.sh/v1/discounts" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Premium Only",
+    "code": "PREMIUM15",
+    "type": "percentage",
+    "amount": 15,
+    "products": ["prod_premium_123"],
+    "organization_id": "org_123"
+  }'
+```

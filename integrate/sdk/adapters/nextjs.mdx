@@ -1,0 +1,389 @@
+---
+title: "Next.js Adapter"
+description: "Integrate Polar SDK into your Next.js application"
+icon: "react"
+---
+
+The Polar SDK works seamlessly with Next.js, supporting both App Router and Pages Router patterns. This guide shows you how to integrate Polar into your Next.js application.
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install @polar-sh/sdk
+```
+
+```bash pnpm
+pnpm add @polar-sh/sdk
+```
+
+```bash yarn
+yarn add @polar-sh/sdk
+```
+
+</CodeGroup>
+
+## Setup
+
+<Steps>
+
+<Step title="Configure environment variables">
+  Add your Polar access token to your environment variables:
+
+  ```bash .env.local
+  POLAR_ACCESS_TOKEN=your_access_token_here
+  NEXT_PUBLIC_POLAR_SERVER_URL=https://api.polar.sh
+  ```
+
+  <Note>
+    Use `NEXT_PUBLIC_` prefix only for client-side variables. Keep your access token server-side only.
+  </Note>
+</Step>
+
+<Step title="Create a Polar client instance">
+  For App Router, create a utility function to initialize the Polar client:
+
+  ```typescript utils/polar.ts
+  import { PolarCore } from '@polar-sh/sdk/core'
+
+  export function getPolarClient() {
+    return new PolarCore({
+      serverURL: process.env.NEXT_PUBLIC_POLAR_SERVER_URL || 'https://api.polar.sh',
+      security: {
+        bearerAuth: process.env.POLAR_ACCESS_TOKEN,
+      },
+    })
+  }
+
+  export function getPublicPolarClient() {
+    return new PolarCore({
+      serverURL: process.env.NEXT_PUBLIC_POLAR_SERVER_URL || 'https://api.polar.sh',
+    })
+  }
+  ```
+</Step>
+
+<Step title="Use in Server Components">
+  Fetch data directly in your server components:
+
+  ```tsx app/products/page.tsx
+  import { getPolarClient } from '@/utils/polar'
+  import { productsSearch } from '@polar-sh/sdk/funcs/productsSearch'
+
+  export default async function ProductsPage() {
+    const client = getPolarClient()
+    const { ok, value: products } = await productsSearch(client, {
+      organizationId: 'your-org-id',
+    })
+
+    if (!ok || !products) {
+      return <div>Failed to load products</div>
+    }
+
+    return (
+      <div>
+        <h1>Products</h1>
+        {products.items.map((product) => (
+          <div key={product.id}>
+            <h2>{product.name}</h2>
+            <p>{product.description}</p>
+          </div>
+        ))}
+      </div>
+    )
+  }
+  ```
+</Step>
+
+</Steps>
+
+## App Router Patterns
+
+### Server Actions
+
+Use Server Actions for mutations:
+
+```typescript app/actions.ts
+'use server'
+
+import { getPolarClient } from '@/utils/polar'
+import { checkoutsCreate } from '@polar-sh/sdk/funcs/checkoutsCreate'
+import { revalidatePath } from 'next/cache'
+
+export async function createCheckout(productId: string) {
+  const client = getPolarClient()
+  
+  const { ok, value: checkout, error } = await checkoutsCreate(client, {
+    productId,
+    successUrl: `${process.env.NEXT_PUBLIC_APP_URL}/success`,
+  })
+
+  if (!ok) {
+    throw new Error(error?.message || 'Failed to create checkout')
+  }
+
+  revalidatePath('/products')
+  return checkout
+}
+```
+
+```tsx app/components/BuyButton.tsx
+'use client'
+
+import { createCheckout } from '@/app/actions'
+import { useState } from 'react'
+
+export function BuyButton({ productId }: { productId: string }) {
+  const [loading, setLoading] = useState(false)
+
+  const handleClick = async () => {
+    setLoading(true)
+    try {
+      const checkout = await createCheckout(productId)
+      window.location.href = checkout.url
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <button onClick={handleClick} disabled={loading}>
+      {loading ? 'Creating checkout...' : 'Buy Now'}
+    </button>
+  )
+}
+```
+
+### API Routes
+
+For API endpoints, use Route Handlers:
+
+```typescript app/api/webhooks/polar/route.ts
+import { getPolarClient } from '@/utils/polar'
+import { webhooksValidatePayload } from '@polar-sh/sdk/funcs/webhooksValidatePayload'
+import { headers } from 'next/headers'
+import { NextResponse } from 'next/server'
+
+export async function POST(request: Request) {
+  const headersList = await headers()
+  const signature = headersList.get('webhook-signature')
+  const body = await request.text()
+
+  const client = getPolarClient()
+  
+  const { ok, value: event } = await webhooksValidatePayload(client, {
+    webhookSignatureHeader: signature || '',
+    payload: body,
+  })
+
+  if (!ok) {
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
+  }
+
+  // Handle the event
+  console.log('Received event:', event.type)
+
+  return NextResponse.json({ received: true })
+}
+```
+
+### Metadata and SEO
+
+Generate dynamic metadata using Polar data:
+
+```tsx app/products/[id]/page.tsx
+import { getPolarClient } from '@/utils/polar'
+import { productsGet } from '@polar-sh/sdk/funcs/productsGet'
+import type { Metadata } from 'next'
+import { notFound } from 'next/navigation'
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}): Promise<Metadata> {
+  const { id } = await params
+  const client = getPolarClient()
+  const { ok, value: product } = await productsGet(client, { id })
+
+  if (!ok || !product) {
+    return { title: 'Product Not Found' }
+  }
+
+  return {
+    title: product.name,
+    description: product.description || undefined,
+  }
+}
+
+export default async function ProductPage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
+  const { id } = await params
+  const client = getPolarClient()
+  const { ok, value: product } = await productsGet(client, { id })
+
+  if (!ok || !product) {
+    notFound()
+  }
+
+  return (
+    <div>
+      <h1>{product.name}</h1>
+      <p>{product.description}</p>
+    </div>
+  )
+}
+```
+
+## Pages Router Patterns
+
+### Server-Side Rendering
+
+```tsx pages/products/index.tsx
+import { getPolarClient } from '@/utils/polar'
+import { productsSearch } from '@polar-sh/sdk/funcs/productsSearch'
+import type { GetServerSideProps } from 'next'
+
+export const getServerSideProps: GetServerSideProps = async () => {
+  const client = getPolarClient()
+  const { ok, value: products } = await productsSearch(client, {
+    organizationId: 'your-org-id',
+  })
+
+  if (!ok) {
+    return { notFound: true }
+  }
+
+  return {
+    props: {
+      products: products.items,
+    },
+  }
+}
+
+export default function ProductsPage({ products }: { products: any[] }) {
+  return (
+    <div>
+      <h1>Products</h1>
+      {products.map((product) => (
+        <div key={product.id}>
+          <h2>{product.name}</h2>
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+### API Routes (Pages Router)
+
+```typescript pages/api/webhooks/polar.ts
+import { getPolarClient } from '@/utils/polar'
+import { webhooksValidatePayload } from '@polar-sh/sdk/funcs/webhooksValidatePayload'
+import type { NextApiRequest, NextApiResponse } from 'next'
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+
+  const signature = req.headers['webhook-signature'] as string
+  const body = JSON.stringify(req.body)
+
+  const client = getPolarClient()
+  const { ok, value: event } = await webhooksValidatePayload(client, {
+    webhookSignatureHeader: signature,
+    payload: body,
+  })
+
+  if (!ok) {
+    return res.status(401).json({ error: 'Invalid signature' })
+  }
+
+  console.log('Received event:', event.type)
+  res.status(200).json({ received: true })
+}
+```
+
+## Error Handling
+
+Handle Polar SDK errors gracefully:
+
+```typescript utils/error-handler.ts
+import { ExpiredCheckoutError } from '@polar-sh/sdk/models/errors/expiredcheckouterror'
+import { ResourceNotFound } from '@polar-sh/sdk/models/errors/resourcenotfound'
+
+export function handlePolarError(error: unknown) {
+  if (error instanceof ExpiredCheckoutError) {
+    return { message: 'This checkout has expired', code: 'EXPIRED' }
+  }
+  
+  if (error instanceof ResourceNotFound) {
+    return { message: 'Resource not found', code: 'NOT_FOUND' }
+  }
+  
+  return { message: 'An unexpected error occurred', code: 'UNKNOWN' }
+}
+```
+
+## TypeScript Support
+
+The Polar SDK is fully typed. Import types directly:
+
+```typescript
+import type { Product } from '@polar-sh/sdk/models/components'
+import type { ProductsSearchResponse } from '@polar-sh/sdk/models/operations'
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+
+<Card title="Keep tokens secure" icon="lock">
+  Never expose your access token in client-side code. Always use server-side functions or API routes.
+</Card>
+
+<Card title="Use error boundaries" icon="shield">
+  Wrap your components in error boundaries to handle API failures gracefully.
+</Card>
+
+<Card title="Cache strategically" icon="database">
+  Use Next.js caching features with `revalidatePath` and `revalidateTag` for optimal performance.
+</Card>
+
+<Card title="Type safety" icon="code">
+  Leverage TypeScript types from the SDK for better developer experience.
+</Card>
+
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="Checkout Integration" icon="shopping-cart" href="/features/checkout">
+  Learn how to implement Polar Checkout in your Next.js app.
+</Card>
+
+<Card title="Webhooks" icon="webhook" href="/integrate/webhooks/endpoints">
+  Set up webhook handlers to receive real-time events.
+</Card>
+
+<Card title="Customer Portal" icon="user" href="/features/customer-portal">
+  Embed the customer portal in your application.
+</Card>
+
+<Card title="API Reference" icon="book" href="/api-reference/introduction">
+  Explore the complete Polar API.
+</Card>
+
+</CardGroup>

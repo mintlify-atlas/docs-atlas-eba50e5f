@@ -1,0 +1,453 @@
+---
+title: "Astro Adapter"
+description: "Integrate Polar SDK into your Astro application"
+icon: "rocket"
+---
+
+Integrate Polar seamlessly into your Astro application, whether you're using SSR, SSG, or hybrid rendering modes.
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install @polar-sh/sdk
+```
+
+```bash pnpm
+pnpm add @polar-sh/sdk
+```
+
+```bash yarn
+yarn add @polar-sh/sdk
+```
+
+</CodeGroup>
+
+## Setup
+
+<Steps>
+
+<Step title="Configure environment variables">
+  Add your Polar credentials to `.env`:
+
+  ```bash .env
+  POLAR_ACCESS_TOKEN=your_access_token_here
+  PUBLIC_POLAR_SERVER_URL=https://api.polar.sh
+  ```
+
+  <Note>
+    Variables prefixed with `PUBLIC_` are exposed to the client. Keep your access token private.
+  </Note>
+</Step>
+
+<Step title="Create Polar utilities">
+  Create a utility file for Polar client instances:
+
+  ```typescript src/lib/polar.ts
+  import { PolarCore } from '@polar-sh/sdk/core'
+
+  export function getPolarClient() {
+    return new PolarCore({
+      serverURL: import.meta.env.PUBLIC_POLAR_SERVER_URL || 'https://api.polar.sh',
+      security: {
+        bearerAuth: import.meta.env.POLAR_ACCESS_TOKEN,
+      },
+    })
+  }
+
+  export function getPublicPolarClient() {
+    return new PolarCore({
+      serverURL: import.meta.env.PUBLIC_POLAR_SERVER_URL || 'https://api.polar.sh',
+    })
+  }
+  ```
+</Step>
+
+<Step title="Use in Astro components">
+  Fetch data in your Astro components:
+
+  ```astro src/pages/products.astro
+  ---
+  import { getPolarClient } from '@/lib/polar'
+  import { productsSearch } from '@polar-sh/sdk/funcs/productsSearch'
+
+  const client = getPolarClient()
+  const { ok, value: products } = await productsSearch(client, {
+    organizationId: 'your-org-id',
+  })
+
+  if (!ok || !products) {
+    return Astro.redirect('/error')
+  }
+  ---
+
+  <html>
+    <head>
+      <title>Products</title>
+    </head>
+    <body>
+      <h1>Products</h1>
+      <ul>
+        {products.items.map((product) => (
+          <li>
+            <h2>{product.name}</h2>
+            <p>{product.description}</p>
+          </li>
+        ))}
+      </ul>
+    </body>
+  </html>
+  ```
+</Step>
+
+</Steps>
+
+## Server Endpoints
+
+Create API endpoints for server-side operations:
+
+```typescript src/pages/api/checkout.ts
+import { getPolarClient } from '@/lib/polar'
+import { checkoutsCreate } from '@polar-sh/sdk/funcs/checkoutsCreate'
+import type { APIRoute } from 'astro'
+
+export const POST: APIRoute = async ({ request }) => {
+  const { productId } = await request.json()
+
+  const client = getPolarClient()
+  const { ok, value: checkout, error } = await checkoutsCreate(client, {
+    productId,
+    successUrl: `${import.meta.env.SITE}/success`,
+  })
+
+  if (!ok) {
+    return new Response(
+      JSON.stringify({ error: error?.message || 'Failed to create checkout' }),
+      { status: 400 }
+    )
+  }
+
+  return new Response(JSON.stringify(checkout), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  })
+}
+```
+
+## Webhook Endpoint
+
+Handle Polar webhooks with API routes:
+
+```typescript src/pages/api/webhooks/polar.ts
+import { getPolarClient } from '@/lib/polar'
+import { webhooksValidatePayload } from '@polar-sh/sdk/funcs/webhooksValidatePayload'
+import type { APIRoute } from 'astro'
+
+export const POST: APIRoute = async ({ request }) => {
+  const signature = request.headers.get('webhook-signature')
+  const body = await request.text()
+
+  if (!signature) {
+    return new Response(JSON.stringify({ error: 'Missing signature' }), {
+      status: 401,
+    })
+  }
+
+  const client = getPolarClient()
+  const { ok, value: event } = await webhooksValidatePayload(client, {
+    webhookSignatureHeader: signature,
+    payload: body,
+  })
+
+  if (!ok) {
+    return new Response(JSON.stringify({ error: 'Invalid signature' }), {
+      status: 401,
+    })
+  }
+
+  // Handle the event
+  switch (event.type) {
+    case 'checkout.completed':
+      console.log('Checkout completed:', event.data)
+      break
+    case 'subscription.created':
+      console.log('Subscription created:', event.data)
+      break
+  }
+
+  return new Response(JSON.stringify({ received: true }), {
+    status: 200,
+  })
+}
+```
+
+## Client-Side Integration
+
+Use Astro's client directives for interactive components:
+
+```astro src/components/BuyButton.astro
+---
+import type { Product } from '@polar-sh/sdk/models/components'
+
+interface Props {
+  product: Product
+}
+
+const { product } = Astro.props
+---
+
+<button
+  class="buy-button"
+  data-product-id={product.id}
+>
+  Buy {product.name}
+</button>
+
+<script>
+  const buttons = document.querySelectorAll('.buy-button')
+  
+  buttons.forEach((button) => {
+    button.addEventListener('click', async () => {
+      const productId = button.getAttribute('data-product-id')
+      
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ productId }),
+      })
+
+      const data = await response.json()
+      
+      if (data.url) {
+        window.location.href = data.url
+      }
+    })
+  })
+</script>
+
+<style>
+  .buy-button {
+    padding: 0.5rem 1rem;
+    background-color: #000;
+    color: #fff;
+    border: none;
+    border-radius: 0.5rem;
+    cursor: pointer;
+  }
+</style>
+```
+
+## React/Vue/Svelte Components
+
+Use Astro's framework integrations with Polar:
+
+```tsx src/components/ProductCard.tsx
+import { useState } from 'react'
+import type { Product } from '@polar-sh/sdk/models/components'
+
+interface Props {
+  product: Product
+}
+
+export function ProductCard({ product }: Props) {
+  const [loading, setLoading] = useState(false)
+
+  const handleBuy = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId: product.id }),
+      })
+
+      const data = await response.json()
+      if (data.url) {
+        window.location.href = data.url
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="product-card">
+      <h3>{product.name}</h3>
+      <p>{product.description}</p>
+      <button onClick={handleBuy} disabled={loading}>
+        {loading ? 'Loading...' : 'Buy Now'}
+      </button>
+    </div>
+  )
+}
+```
+
+Use it in your Astro page:
+
+```astro src/pages/products.astro
+---
+import { ProductCard } from '@/components/ProductCard'
+import { getPolarClient } from '@/lib/polar'
+import { productsSearch } from '@polar-sh/sdk/funcs/productsSearch'
+
+const client = getPolarClient()
+const { ok, value: products } = await productsSearch(client, {
+  organizationId: 'your-org-id',
+})
+---
+
+<html>
+  <body>
+    <h1>Products</h1>
+    {products?.items.map((product) => (
+      <ProductCard client:load product={product} />
+    ))}
+  </body>
+</html>
+```
+
+## Dynamic Routes
+
+Fetch product data for dynamic routes:
+
+```astro src/pages/products/[id].astro
+---
+import { getPolarClient } from '@/lib/polar'
+import { productsGet } from '@polar-sh/sdk/funcs/productsGet'
+
+const { id } = Astro.params
+
+const client = getPolarClient()
+const { ok, value: product } = await productsGet(client, { id: id! })
+
+if (!ok || !product) {
+  return Astro.redirect('/404')
+}
+---
+
+<html>
+  <head>
+    <title>{product.name}</title>
+    <meta name="description" content={product.description || ''} />
+  </head>
+  <body>
+    <h1>{product.name}</h1>
+    <p>{product.description}</p>
+  </body>
+</html>
+```
+
+## Static Site Generation
+
+Generate static pages at build time:
+
+```astro src/pages/products/[id].astro
+---
+import { getPolarClient } from '@/lib/polar'
+import { productsGet, productsSearch } from '@polar-sh/sdk/funcs'
+
+export async function getStaticPaths() {
+  const client = getPolarClient()
+  const { ok, value: products } = await productsSearch(client, {
+    organizationId: 'your-org-id',
+  })
+
+  if (!ok || !products) {
+    return []
+  }
+
+  return products.items.map((product) => ({
+    params: { id: product.id },
+    props: { product },
+  }))
+}
+
+const { product } = Astro.props
+---
+
+<html>
+  <head>
+    <title>{product.name}</title>
+  </head>
+  <body>
+    <h1>{product.name}</h1>
+    <p>{product.description}</p>
+  </body>
+</html>
+```
+
+## Middleware
+
+Add authentication or session management:
+
+```typescript src/middleware.ts
+import { defineMiddleware } from 'astro:middleware'
+import { getPolarClient } from './lib/polar'
+import { customersGet } from '@polar-sh/sdk/funcs/customersGet'
+
+export const onRequest = defineMiddleware(async (context, next) => {
+  const sessionToken = context.cookies.get('polar_session')?.value
+
+  if (sessionToken) {
+    const client = getPolarClient()
+    const { ok, value: customer } = await customersGet(client, {
+      id: sessionToken,
+    })
+
+    if (ok && customer) {
+      context.locals.customer = customer
+    }
+  }
+
+  return next()
+})
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+
+<Card title="Use server endpoints" icon="server">
+  Keep sensitive operations in API routes to protect your access token.
+</Card>
+
+<Card title="Optimize builds" icon="gauge">
+  Use SSG for product pages when possible to improve performance.
+</Card>
+
+<Card title="Type safety" icon="shield-check">
+  Import TypeScript types from the SDK for better development experience.
+</Card>
+
+<Card title="Cache wisely" icon="database">
+  Use Astro's built-in caching for frequently accessed data.
+</Card>
+
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="Checkout" icon="shopping-cart" href="/features/checkout">
+  Implement Polar Checkout in your Astro site.
+</Card>
+
+<Card title="Webhooks" icon="webhook" href="/integrate/webhooks/endpoints">
+  Handle real-time events from Polar.
+</Card>
+
+<Card title="TypeScript SDK" icon="code" href="/integrate/sdk/typescript">
+  Explore the full TypeScript SDK documentation.
+</Card>
+
+<Card title="API Reference" icon="book" href="/api-reference/introduction">
+  Browse the complete API reference.
+</Card>
+
+</CardGroup>

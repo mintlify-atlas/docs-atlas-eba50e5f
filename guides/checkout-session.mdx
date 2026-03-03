@@ -1,0 +1,443 @@
+---
+title: 'Creating Checkout Sessions'
+description: 'Complete guide to creating secure checkout flows for products and subscriptions'
+---
+
+Checkout sessions provide a secure, hosted checkout experience for your customers. This guide covers creating checkouts, handling responses, and managing the complete checkout lifecycle.
+
+## Overview
+
+A checkout session:
+1. Creates a secure, time-limited checkout URL
+2. Handles payment collection via Stripe
+3. Processes webhooks for completion
+4. Redirects customers to your success URL
+
+## Basic Checkout
+
+Create a simple checkout for a product price:
+
+<CodeGroup>
+```typescript TypeScript
+import { Polar } from '@polar-sh/sdk'
+
+const polar = new Polar({
+  accessToken: process.env.POLAR_API_KEY,
+})
+
+const checkout = await polar.checkouts.create({
+  productPriceId: 'price_...',
+  successUrl: 'https://yoursite.com/success',
+})
+
+// Redirect customer to checkout.url
+console.log(checkout.url)
+```
+
+```python Python
+from polar_sdk import Polar
+
+polar = Polar(access_token=os.environ["POLAR_API_KEY"])
+
+checkout = polar.checkouts.create(
+    product_price_id="price_...",
+    success_url="https://yoursite.com/success"
+)
+
+print(checkout.url)
+```
+
+```php PHP
+use Polar\Polar;
+
+$polar = new Polar(
+    accessToken: $_ENV['POLAR_API_KEY']
+);
+
+$checkout = $polar->checkouts->create(
+    productPriceId: 'price_...',
+    successUrl: 'https://yoursite.com/success'
+);
+
+echo $checkout->url;
+```
+</CodeGroup>
+
+## Checkout Parameters
+
+### Required Parameters
+
+<ParamField body="productPriceId" type="string" required>
+  The ID of the product price to purchase.
+</ParamField>
+
+### Optional Parameters
+
+<ParamField body="successUrl" type="string">
+  URL to redirect after successful checkout. Use `{CHECKOUT_ID}` placeholder.
+  
+  ```
+  https://yoursite.com/success?checkout_id={CHECKOUT_ID}
+  ```
+</ParamField>
+
+<ParamField body="customerEmail" type="string">
+  Pre-fill customer email address.
+</ParamField>
+
+<ParamField body="customerName" type="string">
+  Pre-fill customer name.
+</ParamField>
+
+<ParamField body="customerBillingAddress" type="object">
+  Pre-fill billing address:
+  ```typescript
+  {
+    line1: '123 Main St',
+    line2: 'Suite 100',
+    city: 'San Francisco',
+    state: 'CA',
+    postalCode: '94105',
+    country: 'US'
+  }
+  ```
+</ParamField>
+
+<ParamField body="customerId" type="string">
+  Associate checkout with existing customer ID.
+</ParamField>
+
+<ParamField body="allowDiscountCodes" type="boolean" default="true">
+  Enable discount code input field.
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Custom metadata (key-value pairs) attached to the checkout.
+  
+  ```typescript
+  {
+    userId: '12345',
+    source: 'mobile-app',
+    campaign: 'summer-sale'
+  }
+  ```
+</ParamField>
+
+## Complete Example
+
+<Steps>
+  <Step title="Create checkout with all options">
+    ```typescript
+    const checkout = await polar.checkouts.create({
+      productPriceId: 'price_...',
+      successUrl: 'https://yoursite.com/success?checkout_id={CHECKOUT_ID}',
+      customerEmail: 'customer@example.com',
+      customerName: 'Jane Doe',
+      customerBillingAddress: {
+        line1: '123 Main Street',
+        city: 'San Francisco',
+        state: 'CA',
+        postalCode: '94105',
+        country: 'US',
+      },
+      allowDiscountCodes: true,
+      metadata: {
+        userId: user.id,
+        source: 'web',
+        referrer: req.headers.referer,
+      },
+    })
+    ```
+  </Step>
+  
+  <Step title="Redirect to checkout">
+    ```typescript
+    // Server-side redirect
+    res.redirect(checkout.url)
+    
+    // Or return URL for client-side redirect
+    return { checkoutUrl: checkout.url }
+    ```
+  </Step>
+  
+  <Step title="Handle success redirect">
+    ```typescript
+    // /success?checkout_id=checkout_abc123
+    app.get('/success', async (req, res) => {
+      const checkoutId = req.query.checkout_id
+      
+      // Verify checkout status
+      const checkout = await polar.checkouts.get(checkoutId)
+      
+      if (checkout.status === 'confirmed') {
+        // Checkout completed successfully
+        res.render('success', { checkout })
+      } else {
+        // Still processing
+        res.render('processing')
+      }
+    })
+    ```
+  </Step>
+</Steps>
+
+## Checkout States
+
+Checkouts progress through several states:
+
+### open
+Initial state. Customer can complete checkout.
+
+### processing
+Payment is being processed.
+
+### confirmed
+Payment successful. Order and subscription created.
+
+### failed
+Payment failed. Customer can retry.
+
+### expired
+Checkout session expired (default: 24 hours).
+
+## Retrieving Checkout Status
+
+Check checkout status at any time:
+
+```typescript
+const checkout = await polar.checkouts.get('checkout_abc123')
+
+switch (checkout.status) {
+  case 'open':
+    console.log('Waiting for payment')
+    break
+  case 'processing':
+    console.log('Processing payment...')
+    break
+  case 'confirmed':
+    console.log('Payment successful!')
+    console.log('Order ID:', checkout.order?.id)
+    console.log('Subscription ID:', checkout.subscription?.id)
+    break
+  case 'failed':
+    console.log('Payment failed')
+    break
+  case 'expired':
+    console.log('Checkout expired')
+    break
+}
+```
+
+## Webhook Integration
+
+<Warning>
+  Don't rely solely on the success redirect. Always use webhooks for order fulfillment.
+</Warning>
+
+Handle checkout completion via webhooks:
+
+```typescript
+app.post('/webhooks/polar', async (req, res) => {
+  const signature = req.headers['polar-signature']
+  
+  try {
+    const event = polar.webhooks.verifyEvent(
+      req.body,
+      signature,
+      process.env.POLAR_WEBHOOK_SECRET
+    )
+    
+    if (event.type === 'checkout.updated') {
+      const checkout = event.data
+      
+      if (checkout.status === 'confirmed') {
+        // Fulfill order
+        await fulfillOrder({
+          customerId: checkout.customer.id,
+          productId: checkout.product.id,
+          metadata: checkout.metadata,
+        })
+      }
+    }
+    
+    res.json({ received: true })
+  } catch (error) {
+    res.status(400).json({ error: 'Invalid signature' })
+  }
+})
+```
+
+## Discount Codes
+
+Customers can apply discount codes during checkout when enabled:
+
+```typescript
+const checkout = await polar.checkouts.create({
+  productPriceId: 'price_...',
+  allowDiscountCodes: true, // Enable discount input
+})
+```
+
+To validate discount codes before checkout:
+
+```typescript
+try {
+  const discount = await polar.discounts.getByCode({
+    code: 'SUMMER20',
+    organizationId: 'org_...',
+  })
+  
+  if (discount.active && discount.productId === productId) {
+    console.log(`Discount: ${discount.percentOff}% off`)
+  }
+} catch (error) {
+  console.log('Invalid discount code')
+}
+```
+
+## Custom Prices
+
+For products with custom pricing, let customers enter their amount:
+
+```typescript
+const checkout = await polar.checkouts.create({
+  productPriceId: 'price_custom_...',
+  amount: 5000, // $50.00 in cents
+  currency: 'USD',
+})
+```
+
+<Note>
+  Custom prices must be enabled on the product and have a minimum amount configured.
+</Note>
+
+## One-Time vs Subscription
+
+Checkout behavior differs based on product type:
+
+**One-Time Purchase:**
+- Creates an order immediately
+- Customer charged once
+- No recurring billing
+
+**Subscription:**
+- Creates a subscription
+- Recurring billing based on interval
+- Customer can manage in portal
+
+## Trial Subscriptions
+
+For products with trial periods:
+
+```typescript
+const checkout = await polar.checkouts.create({
+  productPriceId: 'price_with_trial_...',
+  // Customer not charged until trial ends
+})
+```
+
+The checkout will:
+1. Create subscription in `trialing` status
+2. Not charge immediately
+3. Charge full price after trial period
+4. Send trial ending reminders
+
+## Error Handling
+
+Handle common checkout errors:
+
+```typescript
+try {
+  const checkout = await polar.checkouts.create({ ... })
+} catch (error) {
+  if (error.statusCode === 404) {
+    // Product price not found
+    console.error('Invalid product price ID')
+  } else if (error.statusCode === 422) {
+    // Validation error
+    console.error('Invalid checkout data:', error.body)
+  } else if (error.statusCode === 403) {
+    // Organization not ready for payments
+    console.error('Payment processor not configured')
+  } else {
+    // Unexpected error
+    console.error('Checkout creation failed:', error)
+  }
+}
+```
+
+## Testing
+
+### Test Mode
+
+Use test API keys for development:
+
+```bash
+POLAR_API_KEY=polar_sk_test_...
+```
+
+### Test Cards
+
+Use Stripe test cards:
+
+- **Success**: 4242 4242 4242 4242
+- **Declined**: 4000 0000 0000 0002
+- **3D Secure**: 4000 0025 0000 3155
+
+### Webhook Testing
+
+Test webhooks locally with ngrok:
+
+```bash
+ngrok http 3000
+```
+
+Add the ngrok URL to your Polar webhook settings:
+```
+https://abc123.ngrok.io/webhooks/polar
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Security">
+    - Always create checkouts server-side
+    - Never expose API keys in client code
+    - Verify webhook signatures
+    - Use HTTPS for all URLs
+  </Accordion>
+  
+  <Accordion title="User Experience">
+    - Pre-fill customer information when available
+    - Show loading states during redirect
+    - Provide clear error messages
+    - Handle network failures gracefully
+  </Accordion>
+  
+  <Accordion title="Reliability">
+    - Use webhooks for order fulfillment
+    - Implement idempotent fulfillment
+    - Log all checkout events
+    - Monitor checkout conversion rates
+  </Accordion>
+</AccordionGroup>
+
+## Checkout Customization
+
+Customize the checkout experience:
+
+1. **Branding**: Configure in Polar dashboard under Settings > Branding
+2. **Email Templates**: Customize confirmation emails
+3. **Terms of Service**: Add your terms URL
+4. **Privacy Policy**: Add your privacy policy URL
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Subscription Upgrades" icon="arrow-up" href="/guides/subscription-upgrades">
+    Handle plan upgrades and changes
+  </Card>
+  <Card title="Customer Portal" icon="user" href="/api-reference/customer-portal/overview">
+    Let customers manage their subscriptions
+  </Card>
+</CardGroup>

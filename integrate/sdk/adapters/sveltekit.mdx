@@ -1,0 +1,479 @@
+---
+title: "SvelteKit Adapter"
+description: "Integrate Polar SDK into your SvelteKit application"
+icon: "fire"
+---
+
+Integrate Polar seamlessly into your SvelteKit application using server-side load functions, form actions, and API routes.
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install @polar-sh/sdk
+```
+
+```bash pnpm
+pnpm add @polar-sh/sdk
+```
+
+```bash yarn
+yarn add @polar-sh/sdk
+```
+
+</CodeGroup>
+
+## Setup
+
+<Steps>
+
+<Step title="Configure environment variables">
+  Add your Polar credentials to `.env`:
+
+  ```bash .env
+  POLAR_ACCESS_TOKEN=your_access_token_here
+  PUBLIC_POLAR_SERVER_URL=https://api.polar.sh
+  ```
+
+  <Note>
+    Variables prefixed with `PUBLIC_` are exposed to the client. Keep your access token private.
+  </Note>
+</Step>
+
+<Step title="Create Polar utility">
+  Create a server-side utility for Polar client instances:
+
+  ```typescript src/lib/server/polar.ts
+  import { PolarCore } from '@polar-sh/sdk/core'
+  import { POLAR_ACCESS_TOKEN, PUBLIC_POLAR_SERVER_URL } from '$env/static/private'
+
+  export function getPolarClient() {
+    if (!POLAR_ACCESS_TOKEN) {
+      throw new Error('POLAR_ACCESS_TOKEN is not set')
+    }
+
+    return new PolarCore({
+      serverURL: PUBLIC_POLAR_SERVER_URL || 'https://api.polar.sh',
+      security: {
+        bearerAuth: POLAR_ACCESS_TOKEN,
+      },
+    })
+  }
+
+  export function getPublicPolarClient() {
+    return new PolarCore({
+      serverURL: PUBLIC_POLAR_SERVER_URL || 'https://api.polar.sh',
+    })
+  }
+  ```
+
+  <Warning>
+    Place server-only code in `src/lib/server/` to prevent client-side bundling.
+  </Warning>
+</Step>
+
+<Step title="Use in page load functions">
+  Fetch data in your page's `+page.server.ts`:
+
+  ```typescript src/routes/products/+page.server.ts
+  import { getPolarClient } from '$lib/server/polar'
+  import { productsSearch } from '@polar-sh/sdk/funcs/productsSearch'
+  import { error } from '@sveltejs/kit'
+  import type { PageServerLoad } from './$types'
+
+  export const load: PageServerLoad = async () => {
+    const client = getPolarClient()
+    const { ok, value: products } = await productsSearch(client, {
+      organizationId: 'your-org-id',
+    })
+
+    if (!ok || !products) {
+      throw error(500, 'Failed to load products')
+    }
+
+    return {
+      products: products.items,
+    }
+  }
+  ```
+
+  Use the data in your component:
+
+  ```svelte src/routes/products/+page.svelte
+  <script lang="ts">
+    import type { PageData } from './$types'
+
+    export let data: PageData
+  </script>
+
+  <h1>Products</h1>
+  <div class="products">
+    {#each data.products as product}
+      <div class="product">
+        <h2>{product.name}</h2>
+        <p>{product.description}</p>
+      </div>
+    {/each}
+  </div>
+  ```
+</Step>
+
+</Steps>
+
+## Form Actions
+
+Handle form submissions with SvelteKit actions:
+
+```typescript src/routes/checkout/+page.server.ts
+import { getPolarClient } from '$lib/server/polar'
+import { checkoutsCreate } from '@polar-sh/sdk/funcs/checkoutsCreate'
+import { redirect, fail } from '@sveltejs/kit'
+import type { Actions } from './$types'
+
+export const actions: Actions = {
+  default: async ({ request, url }) => {
+    const formData = await request.formData()
+    const productId = formData.get('productId') as string
+
+    if (!productId) {
+      return fail(400, { error: 'Product ID is required' })
+    }
+
+    const client = getPolarClient()
+    const { ok, value: checkout, error } = await checkoutsCreate(client, {
+      productId,
+      successUrl: `${url.origin}/success`,
+    })
+
+    if (!ok) {
+      return fail(400, { error: error?.message || 'Failed to create checkout' })
+    }
+
+    throw redirect(303, checkout.url)
+  },
+}
+```
+
+```svelte src/routes/checkout/+page.svelte
+<script lang="ts">
+  import { enhance } from '$app/forms'
+  import type { ActionData } from './$types'
+
+  export let form: ActionData
+</script>
+
+<h1>Checkout</h1>
+
+{#if form?.error}
+  <div class="error">{form.error}</div>
+{/if}
+
+<form method="POST" use:enhance>
+  <input type="hidden" name="productId" value="prod_123" />
+  <button type="submit">Buy Now</button>
+</form>
+```
+
+## API Routes
+
+Create server endpoints for API operations:
+
+```typescript src/routes/api/webhooks/polar/+server.ts
+import { getPolarClient } from '$lib/server/polar'
+import { webhooksValidatePayload } from '@polar-sh/sdk/funcs/webhooksValidatePayload'
+import { json } from '@sveltejs/kit'
+import type { RequestHandler } from './$types'
+
+export const POST: RequestHandler = async ({ request }) => {
+  const signature = request.headers.get('webhook-signature')
+  const body = await request.text()
+
+  if (!signature) {
+    return json({ error: 'Missing signature' }, { status: 401 })
+  }
+
+  const client = getPolarClient()
+  const { ok, value: event } = await webhooksValidatePayload(client, {
+    webhookSignatureHeader: signature,
+    payload: body,
+  })
+
+  if (!ok) {
+    return json({ error: 'Invalid signature' }, { status: 401 })
+  }
+
+  // Handle the webhook event
+  switch (event.type) {
+    case 'checkout.completed':
+      console.log('Checkout completed:', event.data)
+      break
+    case 'subscription.created':
+      console.log('Subscription created:', event.data)
+      break
+    default:
+      console.log('Unhandled event type:', event.type)
+  }
+
+  return json({ received: true })
+}
+```
+
+## Dynamic Routes
+
+Load individual resources with dynamic parameters:
+
+```typescript src/routes/products/[id]/+page.server.ts
+import { getPolarClient } from '$lib/server/polar'
+import { productsGet } from '@polar-sh/sdk/funcs/productsGet'
+import { error } from '@sveltejs/kit'
+import type { PageServerLoad } from './$types'
+
+export const load: PageServerLoad = async ({ params }) => {
+  const client = getPolarClient()
+  const { ok, value: product } = await productsGet(client, {
+    id: params.id,
+  })
+
+  if (!ok || !product) {
+    throw error(404, 'Product not found')
+  }
+
+  return {
+    product,
+  }
+}
+```
+
+```svelte src/routes/products/[id]/+page.svelte
+<script lang="ts">
+  import type { PageData } from './$types'
+
+  export let data: PageData
+</script>
+
+<svelte:head>
+  <title>{data.product.name}</title>
+  <meta name="description" content={data.product.description || ''} />
+</svelte:head>
+
+<h1>{data.product.name}</h1>
+<p>{data.product.description}</p>
+
+<form method="POST" action="/checkout">
+  <input type="hidden" name="productId" value={data.product.id} />
+  <button type="submit">Buy Now</button>
+</form>
+```
+
+## Client-Side Interactions
+
+Use progressive enhancement for dynamic features:
+
+```svelte src/lib/components/BuyButton.svelte
+<script lang="ts">
+  import type { Product } from '@polar-sh/sdk/models/components'
+
+  export let product: Product
+
+  let loading = false
+
+  async function handleBuy() {
+    loading = true
+    try {
+      const response = await fetch('/api/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ productId: product.id }),
+      })
+
+      const data = await response.json()
+
+      if (data.url) {
+        window.location.href = data.url
+      }
+    } catch (error) {
+      console.error('Failed to create checkout:', error)
+    } finally {
+      loading = false
+    }
+  }
+</script>
+
+<button on:click={handleBuy} disabled={loading}>
+  {loading ? 'Processing...' : `Buy ${product.name}`}
+</button>
+```
+
+## Hooks
+
+Add authentication or session handling in hooks:
+
+```typescript src/hooks.server.ts
+import { getPolarClient } from '$lib/server/polar'
+import { customersGet } from '@polar-sh/sdk/funcs/customersGet'
+import type { Handle } from '@sveltejs/kit'
+
+export const handle: Handle = async ({ event, resolve }) => {
+  const sessionToken = event.cookies.get('polar_session')
+
+  if (sessionToken) {
+    const client = getPolarClient()
+    const { ok, value: customer } = await customersGet(client, {
+      id: sessionToken,
+    })
+
+    if (ok && customer) {
+      event.locals.customer = customer
+    }
+  }
+
+  return resolve(event)
+}
+```
+
+Define types in `src/app.d.ts`:
+
+```typescript src/app.d.ts
+import type { Customer } from '@polar-sh/sdk/models/components'
+
+declare global {
+  namespace App {
+    interface Locals {
+      customer?: Customer
+    }
+  }
+}
+
+export {}
+```
+
+Access in load functions:
+
+```typescript src/routes/+page.server.ts
+import type { PageServerLoad } from './$types'
+
+export const load: PageServerLoad = async ({ locals }) => {
+  return {
+    customer: locals.customer,
+  }
+}
+```
+
+## Error Handling
+
+Create custom error pages:
+
+```svelte src/routes/+error.svelte
+<script lang="ts">
+  import { page } from '$app/stores'
+</script>
+
+<div class="error-page">
+  <h1>{$page.status}</h1>
+  <p>{$page.error?.message || 'An unexpected error occurred'}</p>
+  <a href="/">Go home</a>
+</div>
+```
+
+Handle specific Polar errors:
+
+```typescript src/routes/products/[id]/+page.server.ts
+import { getPolarClient } from '$lib/server/polar'
+import { productsGet } from '@polar-sh/sdk/funcs/productsGet'
+import { ResourceNotFound } from '@polar-sh/sdk/models/errors/resourcenotfound'
+import { error } from '@sveltejs/kit'
+import type { PageServerLoad } from './$types'
+
+export const load: PageServerLoad = async ({ params }) => {
+  try {
+    const client = getPolarClient()
+    const { ok, value: product, error: sdkError } = await productsGet(client, {
+      id: params.id,
+    })
+
+    if (!ok) {
+      if (sdkError instanceof ResourceNotFound) {
+        throw error(404, 'Product not found')
+      }
+      throw error(500, 'Failed to load product')
+    }
+
+    return { product }
+  } catch (err) {
+    if (err instanceof Error && 'status' in err) {
+      throw err
+    }
+    throw error(500, 'An unexpected error occurred')
+  }
+}
+```
+
+## Prerendering
+
+Prerender static pages at build time:
+
+```typescript src/routes/products/+page.server.ts
+import { getPolarClient } from '$lib/server/polar'
+import { productsSearch } from '@polar-sh/sdk/funcs/productsSearch'
+import type { PageServerLoad } from './$types'
+
+export const prerender = true
+
+export const load: PageServerLoad = async () => {
+  const client = getPolarClient()
+  const { ok, value: products } = await productsSearch(client, {
+    organizationId: 'your-org-id',
+  })
+
+  return {
+    products: products?.items || [],
+  }
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+
+<Card title="Server-only code" icon="server">
+  Keep sensitive code in `src/lib/server/` to prevent client bundling.
+</Card>
+
+<Card title="Progressive enhancement" icon="bolt">
+  Build forms that work without JavaScript using SvelteKit actions.
+</Card>
+
+<Card title="Type safety" icon="shield-check">
+  Use generated TypeScript types for better developer experience.
+</Card>
+
+<Card title="Prerender when possible" icon="gauge">
+  Use prerendering for static content to improve performance.
+</Card>
+
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="Checkout" icon="shopping-cart" href="/features/checkout">
+  Implement Polar Checkout in your SvelteKit app.
+</Card>
+
+<Card title="Webhooks" icon="webhook" href="/integrate/webhooks/endpoints">
+  Set up webhook handlers for real-time events.
+</Card>
+
+<Card title="TypeScript SDK" icon="code" href="/integrate/sdk/typescript">
+  Explore the full TypeScript SDK.
+</Card>
+
+<Card title="API Reference" icon="book" href="/api-reference/introduction">
+  Browse the complete API reference.
+</Card>
+
+</CardGroup>

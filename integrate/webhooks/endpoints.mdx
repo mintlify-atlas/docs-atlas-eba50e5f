@@ -1,0 +1,198 @@
+---
+title: Managing Webhook Endpoints
+description: Create and manage webhook endpoints to receive real-time notifications from Polar
+---
+
+Webhook endpoints allow you to receive real-time HTTP notifications when events occur in your Polar organization. Each endpoint specifies a URL to receive events and the types of events to listen for.
+
+## Creating a Webhook Endpoint
+
+You can create webhook endpoints via the API or dashboard.
+
+### Via API
+
+```python
+import polar_sdk
+
+client = polar_sdk.Polar(
+    access_token="YOUR_ACCESS_TOKEN"
+)
+
+endpoint = client.webhooks.create_endpoint(
+    url="https://your-app.com/webhooks",
+    format="raw",
+    events=[
+        "order.created",
+        "order.paid",
+        "subscription.created",
+        "subscription.active"
+    ],
+    organization_id="YOUR_ORG_ID"
+)
+
+print(f"Webhook secret: {endpoint.secret}")
+```
+
+```typescript
+import { Polar } from "@polar-sh/sdk";
+
+const polar = new Polar({
+  accessToken: "YOUR_ACCESS_TOKEN",
+});
+
+const endpoint = await polar.webhooks.create({
+  url: "https://your-app.com/webhooks",
+  format: "raw",
+  events: [
+    "order.created",
+    "order.paid",
+    "subscription.created",
+    "subscription.active",
+  ],
+  organizationId: "YOUR_ORG_ID",
+});
+
+console.log(`Webhook secret: ${endpoint.secret}`);
+```
+
+### Via Dashboard
+
+1. Navigate to Settings → Webhooks in your organization dashboard
+2. Click "Create Endpoint"
+3. Enter your webhook URL
+4. Select the events you want to receive
+5. Click "Create"
+6. **Save the webhook secret** - you'll need it to verify webhook signatures
+
+## Webhook Formats
+
+Polar supports three webhook formats:
+
+### Raw (Recommended)
+
+The `raw` format delivers the full event payload as JSON with complete object details. This is the recommended format for most integrations.
+
+```json
+{
+  "type": "order.paid",
+  "timestamp": "2024-03-15T10:30:00Z",
+  "data": {
+    "id": "ord_...",
+    "amount": 5000,
+    "currency": "usd",
+    "customer": {
+      "id": "cus_...",
+      "email": "customer@example.com",
+      "name": "John Doe"
+    },
+    "product": {
+      "id": "prod_...",
+      "name": "Pro Plan"
+    }
+  }
+}
+```
+
+### Discord
+
+Formats the payload as a Discord webhook message with rich embeds. Perfect for sending notifications to Discord channels.
+
+### Slack
+
+Formats the payload as a Slack webhook message with formatted blocks. Ideal for team notifications in Slack.
+
+## Managing Endpoints
+
+### List Endpoints
+
+```python
+endpoints = client.webhooks.list_endpoints(
+    organization_id="YOUR_ORG_ID"
+)
+
+for endpoint in endpoints.items:
+    print(f"{endpoint.url} - {len(endpoint.events)} events")
+```
+
+### Update an Endpoint
+
+You can update the URL, events, or enable/disable an endpoint:
+
+```python
+client.webhooks.update_endpoint(
+    id=endpoint.id,
+    events=["order.paid", "subscription.active"],
+    enabled=True
+)
+```
+
+### Regenerate Secret
+
+If you suspect your webhook secret has been compromised, you can regenerate it:
+
+```python
+updated_endpoint = client.webhooks.reset_endpoint_secret(
+    id=endpoint.id
+)
+
+print(f"New secret: {updated_endpoint.secret}")
+```
+
+<Warning>
+  After regenerating the secret, update your webhook verification code immediately. Webhooks will fail verification until you update to the new secret.
+</Warning>
+
+### Delete an Endpoint
+
+```python
+client.webhooks.delete_endpoint(id=endpoint.id)
+```
+
+## Endpoint Reliability
+
+### Automatic Disabling
+
+Polar automatically disables webhook endpoints after **10 consecutive failed deliveries** to protect your integration and our infrastructure. When this happens:
+
+- The endpoint is marked as `enabled: false`
+- All pending events for that endpoint are marked as skipped
+- Organization admins receive an email notification
+- You can re-enable the endpoint after fixing the issue
+
+### Re-enabling a Disabled Endpoint
+
+To re-enable a disabled endpoint:
+
+1. Fix the issue causing delivery failures (e.g., server errors, wrong URL)
+2. Update the endpoint via API or dashboard:
+
+```python
+client.webhooks.update_endpoint(
+    id=endpoint.id,
+    enabled=True
+)
+```
+
+## Best Practices
+
+- **Verify signatures** on all incoming webhooks (see [Delivery](/integrate/webhooks/delivery))
+- **Use HTTPS** for webhook URLs - HTTP is only allowed for localhost
+- **Return 2xx quickly** - Respond within 10 seconds to avoid timeouts
+- **Process asynchronously** - Queue webhook payloads for background processing
+- **Be idempotent** - You may receive the same event multiple times
+- **Monitor failures** - Check webhook delivery logs in the dashboard regularly
+- **Keep secrets secure** - Store webhook secrets in environment variables, never in code
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Event Types" icon="bell" href="/integrate/webhooks/events">
+    Browse all available webhook events
+  </Card>
+  <Card title="Delivery & Retries" icon="rotate" href="/integrate/webhooks/delivery">
+    Learn about delivery guarantees and signature verification
+  </Card>
+  <Card title="Local Testing" icon="laptop-code" href="/integrate/webhooks/locally">
+    Test webhooks on your local development machine
+  </Card>
+</CardGroup>

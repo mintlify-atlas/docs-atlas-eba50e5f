@@ -1,0 +1,719 @@
+---
+title: "Meters"
+description: "Configure meters to measure and aggregate usage events"
+---
+
+Meters define how usage events are filtered and aggregated to calculate consumption. Each meter represents a billable metric in your product.
+
+## Creating a Meter
+
+A meter consists of:
+
+1. **Name**: Human-readable label (shown on invoices)
+2. **Filter**: Which events to include
+3. **Aggregation**: How to calculate the quantity
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/meters" \
+  -H "Authorization: Bearer polar_at_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "API Requests",
+    "filter": {
+      "conjunction": "and",
+      "clauses": [
+        {
+          "property": "name",
+          "operator": "eq",
+          "value": "api.request"
+        }
+      ]
+    },
+    "aggregation": {
+      "func": "count"
+    }
+  }'
+```
+
+```python Python
+from polar_sdk import Polar
+
+client = Polar(access_token="polar_at_...")
+
+meter = client.meters.create(
+    name="API Requests",
+    filter={
+        "conjunction": "and",
+        "clauses": [
+            {
+                "property": "name",
+                "operator": "eq",
+                "value": "api.request",
+            }
+        ],
+    },
+    aggregation={"func": "count"},
+)
+
+print(f"Created meter: {meter.id}")
+```
+
+```typescript TypeScript
+import { Polar } from "@polar-sh/sdk";
+
+const client = new Polar({
+  accessToken: "polar_at_...",
+});
+
+const meter = await client.meters.create({
+  name: "API Requests",
+  filter: {
+    conjunction: "and",
+    clauses: [
+      {
+        property: "name",
+        operator: "eq",
+        value: "api.request",
+      },
+    ],
+  },
+  aggregation: { func: "count" },
+});
+
+console.log(`Created meter: ${meter.id}`);
+```
+</CodeGroup>
+
+## Filter Configuration
+
+Filters determine which events are included in the meter calculation.
+
+### Filter Structure
+
+A filter has:
+
+- **conjunction**: `"and"` or `"or"` - how to combine clauses
+- **clauses**: Array of filter clauses (or nested filters)
+
+Each clause has:
+
+- **property**: Event field to filter on
+- **operator**: Comparison operator
+- **value**: Value to compare against
+
+### Filter Operators
+
+| Operator | Description | Example |
+|----------|-------------|----------|
+| `eq` | Equals | `"model" eq "gpt-4"` |
+| `ne` | Not equals | `"status" ne "error"` |
+| `gt` | Greater than | `"tokens" gt 1000` |
+| `gte` | Greater than or equal | `"duration" gte 60` |
+| `lt` | Less than | `"size" lt 1000000` |
+| `lte` | Less than or equal | `"price" lte 100` |
+| `like` | Contains (case-insensitive) | `"endpoint" like "chat"` |
+| `not_like` | Does not contain | `"path" not_like "admin"` |
+
+### Filterable Properties
+
+You can filter on:
+
+- **name**: Event name
+- **source**: `"user"` or `"system"`
+- **timestamp**: Unix timestamp (integer)
+- **metadata.{field}**: Any metadata field (use dot notation for nested fields)
+
+### Basic Filter Examples
+
+#### Count All API Requests
+
+```json
+{
+  "conjunction": "and",
+  "clauses": [
+    {
+      "property": "name",
+      "operator": "eq",
+      "value": "api.request"
+    }
+  ]
+}
+```
+
+#### Count GPT-4 Requests Only
+
+```json
+{
+  "conjunction": "and",
+  "clauses": [
+    {
+      "property": "name",
+      "operator": "eq",
+      "value": "api.request"
+    },
+    {
+      "property": "metadata.model",
+      "operator": "eq",
+      "value": "gpt-4"
+    }
+  ]
+}
+```
+
+#### Count Large File Uploads
+
+```json
+{
+  "conjunction": "and",
+  "clauses": [
+    {
+      "property": "name",
+      "operator": "eq",
+      "value": "storage.upload"
+    },
+    {
+      "property": "metadata.size_bytes",
+      "operator": "gt",
+      "value": 10485760
+    }
+  ]
+}
+```
+
+### Complex Filters (OR Logic)
+
+Match multiple event types:
+
+```json
+{
+  "conjunction": "or",
+  "clauses": [
+    {
+      "property": "name",
+      "operator": "eq",
+      "value": "api.request"
+    },
+    {
+      "property": "name",
+      "operator": "eq",
+      "value": "api.batch"
+    }
+  ]
+}
+```
+
+### Nested Filters
+
+Combine AND and OR logic:
+
+```json
+{
+  "conjunction": "and",
+  "clauses": [
+    {
+      "property": "name",
+      "operator": "eq",
+      "value": "api.request"
+    },
+    {
+      "conjunction": "or",
+      "clauses": [
+        {
+          "property": "metadata.model",
+          "operator": "eq",
+          "value": "gpt-4"
+        },
+        {
+          "property": "metadata.model",
+          "operator": "eq",
+          "value": "gpt-4-turbo"
+        }
+      ]
+    }
+  ]
+}
+```
+
+This matches: `api.request` events where model is `gpt-4` OR `gpt-4-turbo`
+
+## Aggregation Functions
+
+Aggregation determines how filtered events are calculated into a quantity.
+
+### Count Aggregation
+
+Count the number of events:
+
+```json
+{
+  "func": "count"
+}
+```
+
+Use for: API calls, transactions, page views, file uploads
+
+### Sum Aggregation
+
+Sum a numeric metadata field:
+
+```json
+{
+  "func": "sum",
+  "property": "metadata.tokens"
+}
+```
+
+Use for: Total tokens, total bytes, total duration, total cost
+
+### Max Aggregation
+
+Find the maximum value:
+
+```json
+{
+  "func": "max",
+  "property": "metadata.concurrent_users"
+}
+```
+
+Use for: Peak concurrent users, max API calls per hour, highest latency
+
+### Min Aggregation
+
+Find the minimum value:
+
+```json
+{
+  "func": "min",
+  "property": "metadata.response_time_ms"
+}
+```
+
+Use for: Minimum latency, lowest throughput
+
+### Average Aggregation
+
+Calculate the average:
+
+```json
+{
+  "func": "avg",
+  "property": "metadata.duration_seconds"
+}
+```
+
+Use for: Average request duration, average file size, average cost per request
+
+### Unique Aggregation
+
+Count distinct values:
+
+```json
+{
+  "func": "unique",
+  "property": "metadata.user_id"
+}
+```
+
+Use for: Monthly active users, unique IPs, distinct projects accessed
+
+## Common Meter Configurations
+
+### API Usage by Model
+
+<Tabs>
+  <Tab title="GPT-4 Tokens">
+    ```json
+    {
+      "name": "GPT-4 Tokens",
+      "filter": {
+        "conjunction": "and",
+        "clauses": [
+          {
+            "property": "name",
+            "operator": "eq",
+            "value": "llm.completion"
+          },
+          {
+            "property": "metadata._llm.model",
+            "operator": "like",
+            "value": "gpt-4"
+          }
+        ]
+      },
+      "aggregation": {
+        "func": "sum",
+        "property": "metadata._llm.total_tokens"
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="GPT-3.5 Tokens">
+    ```json
+    {
+      "name": "GPT-3.5 Tokens",
+      "filter": {
+        "conjunction": "and",
+        "clauses": [
+          {
+            "property": "name",
+            "operator": "eq",
+            "value": "llm.completion"
+          },
+          {
+            "property": "metadata._llm.model",
+            "operator": "like",
+            "value": "gpt-3.5"
+          }
+        ]
+      },
+      "aggregation": {
+        "func": "sum",
+        "property": "metadata._llm.total_tokens"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Storage Usage
+
+```json
+{
+  "name": "Storage (GB)",
+  "filter": {
+    "conjunction": "and",
+    "clauses": [
+      {
+        "property": "name",
+        "operator": "eq",
+        "value": "storage.snapshot"
+      }
+    ]
+  },
+  "aggregation": {
+    "func": "sum",
+    "property": "metadata.gigabytes"
+  }
+}
+```
+
+### Compute Hours
+
+```json
+{
+  "name": "Compute Hours",
+  "filter": {
+    "conjunction": "and",
+    "clauses": [
+      {
+        "property": "name",
+        "operator": "eq",
+        "value": "compute.job"
+      }
+    ]
+  },
+  "aggregation": {
+    "func": "sum",
+    "property": "metadata.duration_hours"
+  }
+}
+```
+
+### Monthly Active Users
+
+```json
+{
+  "name": "Monthly Active Users",
+  "filter": {
+    "conjunction": "and",
+    "clauses": [
+      {
+        "property": "name",
+        "operator": "eq",
+        "value": "user.active"
+      }
+    ]
+  },
+  "aggregation": {
+    "func": "unique",
+    "property": "metadata.user_id"
+  }
+}
+```
+
+### Peak Concurrent Connections
+
+```json
+{
+  "name": "Peak Concurrent Connections",
+  "filter": {
+    "conjunction": "and",
+    "clauses": [
+      {
+        "property": "name",
+        "operator": "eq",
+        "value": "connection.active"
+      }
+    ]
+  },
+  "aggregation": {
+    "func": "max",
+    "property": "metadata.count"
+  }
+}
+```
+
+## Querying Meter Quantities
+
+Retrieve consumption for a time period:
+
+<CodeGroup>
+```python Python
+from datetime import datetime, timezone
+
+quantities = client.meters.quantities(
+    id=meter.id,
+    start_timestamp=datetime(2024, 3, 1, tzinfo=timezone.utc),
+    end_timestamp=datetime(2024, 3, 31, tzinfo=timezone.utc),
+    interval="day",
+)
+
+print(f"Total: {quantities.total}")
+for q in quantities.quantities:
+    print(f"{q.timestamp}: {q.quantity}")
+```
+
+```typescript TypeScript
+const quantities = await client.meters.quantities({
+  id: meter.id,
+  startTimestamp: new Date("2024-03-01T00:00:00Z"),
+  endTimestamp: new Date("2024-03-31T00:00:00Z"),
+  interval: "day",
+});
+
+console.log(`Total: ${quantities.total}`);
+for (const q of quantities.quantities) {
+  console.log(`${q.timestamp}: ${q.quantity}`);
+}
+```
+</CodeGroup>
+
+### Intervals
+
+Available intervals:
+
+- `hour`: Hourly breakdown
+- `day`: Daily breakdown
+- `week`: Weekly breakdown
+- `month`: Monthly breakdown
+- `year`: Yearly breakdown
+
+### Customer Filtering
+
+Query quantities for specific customers:
+
+```python
+quantities = client.meters.quantities(
+    id=meter.id,
+    start_timestamp=start,
+    end_timestamp=end,
+    interval="day",
+    customer_id=[customer_id],  # Filter by customer
+)
+```
+
+### Per-Customer Aggregation
+
+Aggregate quantities across customers:
+
+```python
+# Get sum across all customers
+quantities = client.meters.quantities(
+    id=meter.id,
+    start_timestamp=start,
+    end_timestamp=end,
+    interval="day",
+    customer_aggregation_function="sum",
+)
+
+# Get average per customer
+quantities = client.meters.quantities(
+    id=meter.id,
+    start_timestamp=start,
+    end_timestamp=end,
+    interval="day",
+    customer_aggregation_function="avg",
+)
+```
+
+Available functions: `sum`, `avg`, `max`, `min`, `count`
+
+## Updating Meters
+
+Update meter configuration:
+
+<CodeGroup>
+```python Python
+updated_meter = client.meters.update(
+    id=meter.id,
+    name="API Requests (Updated)",
+    filter={
+        "conjunction": "and",
+        "clauses": [
+            {
+                "property": "name",
+                "operator": "eq",
+                "value": "api.request",
+            },
+            {
+                "property": "metadata.version",
+                "operator": "eq",
+                "value": "v2",
+            },
+        ],
+    },
+)
+```
+
+```typescript TypeScript
+const updatedMeter = await client.meters.update({
+  id: meter.id,
+  name: "API Requests (Updated)",
+  filter: {
+    conjunction: "and",
+    clauses: [
+      { property: "name", operator: "eq", value: "api.request" },
+      { property: "metadata.version", operator: "eq", value: "v2" },
+    ],
+  },
+});
+```
+</CodeGroup>
+
+<Warning>
+  Updating a meter's filter or aggregation affects future billing but does not retroactively change past invoices.
+</Warning>
+
+## Archiving Meters
+
+Archive meters that are no longer used:
+
+```python
+client.meters.update(
+    id=meter.id,
+    is_archived=True,
+)
+```
+
+Archived meters:
+- Stop processing new events
+- Are not used for billing
+- Can be restored by setting `is_archived=False`
+- Historical data is preserved
+
+## Meter Metadata
+
+Store additional information with meters:
+
+```python
+meter = client.meters.create(
+    name="API Requests",
+    filter={...},
+    aggregation={...},
+    metadata={
+        "category": "api",
+        "priority": "high",
+        "docs_url": "https://docs.example.com/api-billing",
+    },
+)
+```
+
+## Linking Meters to Products
+
+To charge for metered usage, create a metered product price:
+
+<Steps>
+  <Step title="Create a meter">
+    Define what to measure
+  </Step>
+  <Step title="Create a product">
+    Create or use an existing product
+  </Step>
+  <Step title="Add a metered price">
+    Link the meter to a product price with pricing tiers
+  </Step>
+  <Step title="Add to subscription">
+    Include the product in subscriptions
+  </Step>
+</Steps>
+
+See the [Billing documentation](/features/usage-based-billing/billing) for details on pricing configuration.
+
+## Best Practices
+
+### Naming
+
+- **Be specific**: "GPT-4 Tokens" instead of "Tokens"
+- **Include units**: "Storage (GB)" instead of "Storage"
+- **Use customer language**: Match your UI and documentation
+- **Keep it concise**: Names appear on invoices
+
+### Filter Design
+
+- **Start simple**: Begin with basic filters, add complexity as needed
+- **Test thoroughly**: Verify events match as expected
+- **Document filters**: Explain what each meter includes/excludes
+- **Use consistent event names**: Makes filtering easier
+
+### Aggregation Selection
+
+| Scenario | Aggregation | Notes |
+|----------|-------------|-------|
+| API calls, requests | `count` | Simple event counting |
+| Tokens, bytes, time | `sum` | Accumulate totals |
+| Peak usage, capacity | `max` | Highest value in period |
+| Active users, IPs | `unique` | Distinct values |
+| Average latency, size | `avg` | Mean value |
+
+### Performance
+
+- **Avoid overly complex filters**: Keep filter clauses reasonable
+- **Use appropriate properties**: Filter on indexed fields when possible
+- **Consider cardinality**: Be careful with unique aggregations on high-cardinality fields
+- **Monitor query times**: Test meters with realistic event volumes
+
+## Troubleshooting
+
+### Meter Shows Zero Usage
+
+1. **Check filter**: Verify events match your filter clauses
+2. **Test with sample event**: Send a test event and check if it matches
+3. **Verify aggregation property**: Ensure the metadata field exists
+4. **Check time range**: Query for the correct time period
+
+### Usage Doesn't Match Expectations
+
+1. **Review filter logic**: AND vs OR conjunctions
+2. **Check operator**: Using `eq` vs `like` vs `gt`
+3. **Verify property names**: Typos in `metadata.field` references
+4. **Inspect actual events**: List events to see what's being ingested
+
+### Aggregation Returns Unexpected Values
+
+1. **Null handling**: Aggregations skip events missing the property
+2. **Type mismatches**: Ensure metadata values are numeric for sum/max/min/avg
+3. **Summability**: Non-summable aggregations (max/min/avg/unique) behave differently across price changes
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Credits" icon="coins" href="/features/usage-based-billing/credits">
+    Add credit benefits to your products
+  </Card>
+  <Card title="Billing" icon="file-invoice-dollar" href="/features/usage-based-billing/billing">
+    Configure pricing and generate invoices
+  </Card>
+</CardGroup>

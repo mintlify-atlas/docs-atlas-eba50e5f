@@ -1,0 +1,343 @@
+---
+title: Testing Webhooks Locally
+description: Set up and test webhooks on your local development machine
+---
+
+Testing webhooks locally requires exposing your local server to the internet so Polar can send events to it. This guide covers multiple approaches for local webhook testing.
+
+## Using Polar CLI (Recommended)
+
+The Polar CLI provides the easiest way to test webhooks locally by listening to events in real-time.
+
+### Installation
+
+```bash
+npm install -g @polar-sh/cli
+# or
+pnpm add -g @polar-sh/cli
+```
+
+### Authentication
+
+```bash
+polar login
+```
+
+This opens your browser to authenticate and stores credentials locally.
+
+### Listen to Webhooks
+
+```bash
+polar webhooks listen --org your-org-slug --forward http://localhost:3000/webhooks
+```
+
+**What this does:**
+- Connects to Polar's webhook event stream for your organization
+- Forwards all webhook events to your local endpoint
+- Shows real-time logs of events and responses
+- Applies the same signature headers as production webhooks
+
+### Filter by Event Type
+
+```bash
+polar webhooks listen \
+  --org your-org-slug \
+  --forward http://localhost:3000/webhooks \
+  --events order.paid,subscription.active
+```
+
+### Test with a Sample Event
+
+You can trigger a test event from the dashboard while the CLI is listening:
+
+1. Go to Settings → Webhooks in your organization
+2. Click "Send Test Event"
+3. Select an event type
+4. Watch it appear in your CLI and hit your local server
+
+## Using ngrok
+
+Ngrok creates a public URL that tunnels to your localhost.
+
+### Installation
+
+```bash
+brew install ngrok
+# or download from https://ngrok.com/download
+```
+
+### Start Tunnel
+
+```bash
+ngrok http 3000
+```
+
+This gives you a public URL like `https://abc123.ngrok.io`.
+
+### Create Webhook Endpoint
+
+```python
+import polar_sdk
+
+client = polar_sdk.Polar(access_token="YOUR_ACCESS_TOKEN")
+
+endpoint = client.webhooks.create_endpoint(
+    url="https://abc123.ngrok.io/webhooks",
+    format="raw",
+    events=["order.paid", "subscription.active"],
+    organization_id="YOUR_ORG_ID"
+)
+
+print(f"Webhook secret: {endpoint.secret}")
+# Store this secret in your local .env file
+```
+
+### Update Local Code
+
+Add the webhook secret to your environment:
+
+```bash
+WEBHOOK_SECRET="polar_whs_..."
+```
+
+### Test the Webhook
+
+Trigger an event in Polar (e.g., create a test order) and watch it hit your local server.
+
+<Warning>
+  Remember to delete the ngrok webhook endpoint after testing. Each ngrok session creates a new URL, so you'll need to update the endpoint URL each time.
+</Warning>
+
+## Using LocalTunnel
+
+LocalTunnel is a free alternative to ngrok.
+
+### Installation
+
+```bash
+npm install -g localtunnel
+```
+
+### Start Tunnel
+
+```bash
+lt --port 3000 --subdomain my-polar-test
+```
+
+This gives you `https://my-polar-test.loca.lt`.
+
+### Create Webhook Endpoint
+
+Follow the same steps as ngrok, using your LocalTunnel URL.
+
+## Sample Local Server
+
+Here's a complete example of a local webhook server for testing:
+
+### Python (FastAPI)
+
+```python
+from fastapi import FastAPI, Request, HTTPException
+from svix.webhooks import Webhook, WebhookVerificationError
+import os
+
+app = FastAPI()
+
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
+
+@app.post("/webhooks")
+async def webhook_handler(request: Request):
+    # Get headers
+    webhook_id = request.headers.get("webhook-id")
+    webhook_timestamp = request.headers.get("webhook-timestamp")
+    webhook_signature = request.headers.get("webhook-signature")
+    
+    if not all([webhook_id, webhook_timestamp, webhook_signature]):
+        raise HTTPException(status_code=400, detail="Missing webhook headers")
+    
+    # Get body
+    body = await request.body()
+    
+    # Verify signature
+    wh = Webhook(WEBHOOK_SECRET)
+    try:
+        payload = wh.verify(body, {
+            "webhook-id": webhook_id,
+            "webhook-timestamp": webhook_timestamp,
+            "webhook-signature": webhook_signature,
+        })
+    except WebhookVerificationError:
+        raise HTTPException(status_code=401, detail="Invalid signature")
+    
+    # Log the event
+    print(f"[{payload['type']}] {payload['data']['id']}")
+    
+    # Process based on type
+    if payload["type"] == "order.paid":
+        customer_email = payload["data"]["customer"]["email"]
+        print(f"Grant access to {customer_email}")
+    
+    elif payload["type"] == "subscription.active":
+        subscription_id = payload["data"]["id"]
+        print(f"Activate subscription {subscription_id}")
+    
+    return {"ok": True}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=3000)
+```
+
+### Node.js (Express)
+
+```typescript
+import express, { Request, Response } from "express";
+import { Webhook } from "standardwebhooks";
+
+const app = express();
+app.use(express.json());
+
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET!;
+
+app.post("/webhooks", async (req: Request, res: Response) => {
+  const webhookId = req.headers["webhook-id"] as string;
+  const webhookTimestamp = req.headers["webhook-timestamp"] as string;
+  const webhookSignature = req.headers["webhook-signature"] as string;
+
+  if (!webhookId || !webhookTimestamp || !webhookSignature) {
+    return res.status(400).json({ error: "Missing webhook headers" });
+  }
+
+  const body = JSON.stringify(req.body);
+
+  const wh = new Webhook(WEBHOOK_SECRET);
+  try {
+    const payload = wh.verify(body, {
+      "webhook-id": webhookId,
+      "webhook-timestamp": webhookTimestamp,
+      "webhook-signature": webhookSignature,
+    }) as any;
+
+    console.log(`[${payload.type}] ${payload.data.id}`);
+
+    if (payload.type === "order.paid") {
+      console.log(`Grant access to ${payload.data.customer.email}`);
+    } else if (payload.type === "subscription.active") {
+      console.log(`Activate subscription ${payload.data.id}`);
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Invalid signature", err);
+    return res.status(401).json({ error: "Invalid signature" });
+  }
+});
+
+app.listen(3000, () => {
+  console.log("Webhook server listening on port 3000");
+});
+```
+
+## Debugging Tips
+
+### Enable Verbose Logging
+
+Log the full webhook payload for debugging:
+
+```python
+import json
+
+@app.post("/webhooks")
+async def webhook_handler(request: Request):
+    body = await request.body()
+    payload = json.loads(body)
+    
+    # Log full payload
+    print(json.dumps(payload, indent=2))
+    
+    # Verify and process...
+```
+
+### Inspect Headers
+
+```python
+@app.post("/webhooks")
+async def webhook_handler(request: Request):
+    print("Headers:", dict(request.headers))
+    print("Body:", await request.body())
+```
+
+### Validate Signature Separately
+
+```python
+@app.post("/webhooks")
+async def webhook_handler(request: Request):
+    # First, log everything
+    headers = {
+        "webhook-id": request.headers.get("webhook-id"),
+        "webhook-timestamp": request.headers.get("webhook-timestamp"),
+        "webhook-signature": request.headers.get("webhook-signature"),
+    }
+    body = await request.body()
+    
+    print(f"Headers: {headers}")
+    print(f"Body: {body.decode()}")
+    print(f"Secret: {WEBHOOK_SECRET[:20]}...")
+    
+    # Then verify
+    wh = Webhook(WEBHOOK_SECRET)
+    try:
+        payload = wh.verify(body, headers)
+        print("✅ Signature valid")
+    except Exception as e:
+        print(f"❌ Signature invalid: {e}")
+        raise HTTPException(status_code=401)
+```
+
+### Check Delivery Logs
+
+If events aren't reaching your local server:
+
+1. Go to Settings → Webhooks → Deliveries in the dashboard
+2. Find recent deliveries to your endpoint
+3. Check the HTTP status code and response
+4. Look for error messages
+
+### Common Issues
+
+**Signature verification fails:**
+- Make sure you're using the exact secret from endpoint creation
+- Don't modify the request body before verification
+- Check that you're passing the raw body bytes, not parsed JSON
+
+**Webhooks not arriving:**
+- Verify your tunnel is running (`ngrok http 3000`)
+- Check the endpoint URL in Polar dashboard
+- Ensure your local server is listening on the correct port
+- Check firewall settings
+
+**Timeout errors:**
+- Return 2xx response within 10 seconds
+- Queue long-running tasks asynchronously
+
+## Testing Different Event Types
+
+Create test events from the dashboard:
+
+1. **Orders:** Create a test checkout and complete it
+2. **Subscriptions:** Create a test subscription product and purchase it
+3. **Customers:** Create a customer via API or dashboard
+4. **Refunds:** Issue a refund for a test order
+
+Alternatively, use the "Send Test Event" button in Settings → Webhooks to send synthetic events.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Webhook Events" icon="bell" href="/integrate/webhooks/events">
+    Learn about all available webhook events
+  </Card>
+  <Card title="Delivery & Security" icon="shield-check" href="/integrate/webhooks/delivery">
+    Implement signature verification for production
+  </Card>
+</CardGroup>

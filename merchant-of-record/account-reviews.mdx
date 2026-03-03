@@ -1,0 +1,409 @@
+---
+title: Account Reviews
+description: Understanding the account review and approval process
+---
+
+## Overview
+
+To maintain platform integrity and comply with financial regulations, Polar conducts account reviews for sellers. This process helps prevent fraud, ensure compliance, and maintain trust in the platform.
+
+## When Reviews Occur
+
+### Initial Review
+
+All new accounts undergo review when:
+
+1. Financial account created
+2. Stripe onboarding completed
+3. First payout requested
+4. Account reaches certain thresholds
+
+### Ongoing Reviews
+
+Established accounts may be reviewed:
+
+- Periodically based on activity
+- When reaching revenue thresholds
+- Following unusual transaction patterns
+- In response to customer complaints
+- Due to regulatory requirements
+
+### Threshold-Based Reviews
+
+Accounts trigger reviews at specific revenue milestones:
+
+- First payout
+- $1,000 in lifetime revenue
+- $5,000 in lifetime revenue
+- $10,000 in lifetime revenue
+- Higher thresholds as appropriate
+
+<Info>
+Thresholds are set per account and track cumulative revenue. They help ensure accounts are reviewed at appropriate growth stages.
+</Info>
+
+## Review Process
+
+### Automated Review
+
+Most reviews use AI-powered analysis:
+
+1. **Data Collection**: System gathers organization and product information
+2. **AI Analysis**: OpenAI models evaluate against [acceptable use policy](/merchant-of-record/acceptable-use)
+3. **Risk Scoring**: Account receives risk score (0-100)
+4. **Verdict**: Pass, Fail, or Uncertain
+
+### Review Criteria
+
+The review examines:
+
+- **Organization Details**: Name, description, website, social links
+- **Product Offerings**: What you're selling and how it's described
+- **Customer Activity**: Transaction patterns, refund rates, disputes
+- **Compliance**: Adherence to acceptable use policy
+- **Business Legitimacy**: Verification of business identity
+
+### Review Verdicts
+
+#### Pass
+
+- Account meets all requirements
+- No policy violations detected
+- Low risk score
+- Account moves to Active status
+- Payouts enabled
+
+#### Fail
+
+- Policy violations detected
+- High risk score
+- Prohibited products or services
+- Account status set to Under Review
+- Payouts disabled
+- Reason provided
+
+#### Uncertain
+
+- Insufficient information
+- Borderline compliance issues
+- Manual review required
+- Account status set to Under Review
+- Payouts temporarily disabled
+
+### Manual Review
+
+Some accounts require human review:
+
+- Uncertain AI verdicts
+- Complex business models
+- Edge cases
+- Appealed decisions
+- High-value accounts
+
+## Account Statuses
+
+### Created
+
+Initial state after account creation:
+
+- Account record exists
+- Onboarding not completed
+- No review conducted yet
+- Cannot receive payouts
+
+### Onboarding Started
+
+Stripe onboarding in progress:
+
+- Completing required information
+- Identity verification pending
+- Bank account connection in progress
+- Review pending completion
+
+### Under Review
+
+Account being evaluated:
+
+- Review in progress
+- Payouts disabled
+- New revenue still accumulates
+- Additional information may be requested
+
+<Warning>
+While under review, you can still process transactions, but payouts are temporarily disabled until review completes.
+</Warning>
+
+### Active
+
+Account fully operational:
+
+- Passed all reviews
+- Payouts enabled
+- All features available
+- Normal operations
+
+### Denied
+
+Account rejected:
+
+- Policy violations identified
+- Account permanently restricted
+- Payouts disabled
+- Can appeal decision
+
+## During a Review
+
+### What You Can Do
+
+- Continue processing transactions
+- Revenue accumulates in balance
+- Monitor account status
+- Check for messages from Polar
+- Prepare documentation if requested
+
+### What You Cannot Do
+
+- Create payouts
+- Withdraw existing balance
+- Change critical account settings
+- Add new high-risk products
+
+### Responding to Information Requests
+
+If we request additional information:
+
+1. **Check Email**: We'll contact your account admin email
+2. **Review Request**: Understand what's needed
+3. **Gather Documents**: Collect requested information
+4. **Submit Promptly**: Respond within stated timeframe
+5. **Follow Up**: Monitor for additional requests
+
+### Common Information Requests
+
+- Business registration documents
+- Product descriptions and demos
+- Customer service policies
+- Refund policies
+- Identity verification documents
+- Proof of address
+- Website or social media links
+- Sample product deliverables
+
+## Appeal Process
+
+### If Your Account is Denied
+
+You can appeal the decision:
+
+1. Review the denial reason carefully
+2. Gather evidence of compliance
+3. Address specific violations mentioned
+4. Submit appeal through the platform
+5. Wait for appeal review (typically 5-7 business days)
+
+### Appeal Submission
+
+Include in your appeal:
+
+- **Explanation**: Why you believe the decision was incorrect
+- **Evidence**: Documentation supporting your case
+- **Changes Made**: How you've addressed concerns
+- **Compliance**: How you meet acceptable use policy
+- **Contact Info**: How to reach you for questions
+
+### Appeal Review
+
+Appeals are reviewed by:
+
+- Senior compliance team members
+- Not the original reviewer
+- With fresh perspective
+- Within 5-7 business days
+
+### Appeal Outcomes
+
+#### Approved
+
+- Account reinstated
+- Status changed to Active
+- Payouts enabled
+- Guidance provided to prevent future issues
+
+#### Rejected
+
+- Original decision upheld
+- Detailed explanation provided
+- Option for final escalation
+- Account remains denied
+
+#### Approved with Conditions
+
+- Account reinstated with requirements
+- Specific changes must be made
+- Monitoring period imposed
+- Re-review scheduled
+
+## Review Timeline
+
+### Automated Reviews
+
+- **Processing Time**: Minutes to hours
+- **AI Analysis**: Near-instant
+- **Result Notification**: Within 24 hours
+
+### Manual Reviews
+
+- **Processing Time**: 2-5 business days
+- **Complex Cases**: Up to 10 business days
+- **Status Updates**: Every 48-72 hours
+
+### Appeals
+
+- **Initial Review**: 5-7 business days
+- **Additional Info Requested**: Clock restarts
+- **Final Decision**: Within 14 days total
+
+## Maintaining Good Standing
+
+### Best Practices
+
+- **Accurate Information**: Keep profile and product details current
+- **Clear Descriptions**: Describe products honestly and completely
+- **Good Support**: Respond to customers promptly
+- **Honor Policies**: Follow stated refund and cancellation policies
+- **Transparency**: Disclose limitations and requirements
+- **Quality**: Maintain consistent product quality
+
+### Red Flags to Avoid
+
+- High refund rates
+- Frequent disputes or chargebacks
+- Vague or misleading product descriptions
+- Unresponsive to customer complaints
+- Sudden changes in business model
+- Products that border on prohibited categories
+- Inconsistent information across platforms
+
+### Proactive Measures
+
+- **Update Profile**: Keep organization details current
+- **Document Everything**: Maintain records of compliance
+- **Monitor Feedback**: Address issues before they escalate
+- **Review Policy**: Stay current with acceptable use policy
+- **Communicate**: Reach out proactively if unsure about compliance
+
+## AI Review Details
+
+### How It Works
+
+Our AI review system:
+
+1. Analyzes organization data snapshot
+2. Reviews product listings and descriptions
+3. Examines transaction patterns
+4. Checks against acceptable use policy
+5. Generates risk score and verdict
+6. Provides detailed reasoning
+
+### Model Information
+
+- Uses OpenAI's latest models
+- Trained on acceptable use policy
+- Considers multiple data points
+- Provides transparency in decisions
+- Continuously improved based on feedback
+
+### Limitations
+
+AI reviews may:
+
+- Miss nuanced context
+- Be overly cautious with edge cases
+- Require manual verification
+- Produce false positives
+
+That's why we offer appeals and manual review options.
+
+## Feedback on Reviews
+
+Help us improve the review process:
+
+### Organization Review Feedback
+
+After a review, you can provide feedback:
+
+- Was the decision fair?
+- Was the reason clear?
+- What could be improved?
+- Suggestions for better process
+
+### Submit Feedback
+
+Email [feedback@polar.sh](mailto:feedback@polar.sh) with:
+
+- Your organization ID
+- Review details
+- Specific feedback
+- Suggestions
+
+## Privacy and Data
+
+### What Data We Review
+
+- Public organization information
+- Product descriptions and pricing
+- Transaction statistics (not individual transactions)
+- Customer feedback and disputes
+- Website and social media content
+
+### Data Retention
+
+- Review data stored for compliance
+- Snapshots kept for audit trail
+- Personal data handled per privacy policy
+- Deleted upon account closure
+
+### Confidentiality
+
+- Review details kept confidential
+- Only shared with relevant parties
+- Not disclosed publicly
+- Protected by security measures
+
+## Questions About Reviews
+
+### Common Questions
+
+**Q: How long does a review take?**
+A: Automated reviews complete within 24 hours. Manual reviews take 2-5 business days.
+
+**Q: Can I expedite a review?**
+A: No, but providing complete information upfront helps.
+
+**Q: Will I be notified of review status?**
+A: Yes, you'll receive email notifications at key stages.
+
+**Q: Can I continue selling during review?**
+A: Yes, transactions continue normally. Only payouts are affected.
+
+**Q: What if I disagree with the decision?**
+A: Submit an appeal with supporting evidence.
+
+**Q: Are reviews confidential?**
+A: Yes, review details are private between you and Polar.
+
+### Getting Help
+
+If you have questions about the review process:
+
+- Email [support@polar.sh](mailto:support@polar.sh)
+- Include your account/organization ID
+- Describe your specific situation
+- We'll respond within 24-48 hours
+
+## Next Steps
+
+- Review [Acceptable Use Policy](/merchant-of-record/acceptable-use)
+- Understand [Fee Structure](/merchant-of-record/fees)
+- Set up your [Financial Account](/features/finance/accounts)
+- Learn about [Supported Countries](/merchant-of-record/supported-countries)

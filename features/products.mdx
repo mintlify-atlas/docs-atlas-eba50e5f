@@ -1,0 +1,353 @@
+---
+title: "Products"
+description: "Create and manage products with flexible pricing models"
+---
+
+Products are the core items you sell through Polar. Each product can have multiple prices, support both one-time purchases and subscriptions, and be configured with various pricing strategies.
+
+## Product Types
+
+Polar supports two main product types:
+
+<CardGroup cols={2}>
+  <Card title="One-Time Products" icon="cart-shopping">
+    Single purchases that don't recur. Perfect for digital downloads, licenses, or standalone products.
+  </Card>
+  <Card title="Subscription Products" icon="rotate">
+    Recurring products that charge on a regular interval (monthly, yearly, etc.).
+  </Card>
+</CardGroup>
+
+## Creating Products
+
+Create products through the API or dashboard. Each product requires:
+
+- **Name**: 3-64 characters describing your product
+- **Description**: Optional detailed description
+- **Visibility**: `public` or `private`
+- **Prices**: At least one price (fixed, custom, free, seat-based, or metered)
+- **Organization**: The organization that owns the product
+
+<CodeGroup>
+```typescript One-Time Product
+const product = await polar.products.create({
+  name: "Pro License",
+  description: "Professional software license",
+  visibility: "public",
+  recurring_interval: null,
+  prices: [
+    {
+      amount_type: "fixed",
+      price_amount: 9900, // $99.00 in cents
+      price_currency: "usd"
+    }
+  ]
+});
+```
+
+```typescript Subscription Product
+const product = await polar.products.create({
+  name: "Pro Plan",
+  description: "Monthly subscription with all features",
+  visibility: "public",
+  recurring_interval: "month",
+  recurring_interval_count: 1,
+  prices: [
+    {
+      amount_type: "fixed",
+      price_amount: 1900, // $19.00/month
+      price_currency: "usd"
+    }
+  ]
+});
+```
+</CodeGroup>
+
+## Pricing Strategies
+
+Products support multiple pricing models that can be mixed and matched per currency.
+
+### Fixed Pricing
+
+Standard fixed price - the most common pricing model.
+
+```typescript
+{
+  amount_type: "fixed",
+  price_amount: 4900, // $49.00
+  price_currency: "usd"
+}
+```
+
+### Pay What You Want (Custom Pricing)
+
+Let customers choose their price within optional min/max bounds.
+
+```typescript
+{
+  amount_type: "custom",
+  minimum_amount: 1000,    // $10 minimum
+  maximum_amount: 100000,  // $1,000 maximum
+  preset_amount: 2500,     // $25 suggested
+  price_currency: "usd"
+}
+```
+
+<Note>
+  Amounts between 1-49 cents are invalid due to payment processor minimums. Use 0 for free or ≥50 for paid.
+</Note>
+
+### Free Pricing
+
+Completely free products, useful for trials or free tiers.
+
+```typescript
+{
+  amount_type: "free",
+  price_currency: "usd"
+}
+```
+
+### Seat-Based Pricing
+
+Volume-based pricing with tiered pricing per seat.
+
+```typescript
+{
+  amount_type: "seat_based",
+  seat_tiers: {
+    tiers: [
+      { min_seats: 1, max_seats: 5, price_per_seat: 1000 },   // $10/seat for 1-5
+      { min_seats: 6, max_seats: 20, price_per_seat: 800 },   // $8/seat for 6-20
+      { min_seats: 21, max_seats: null, price_per_seat: 600 } // $6/seat for 21+
+    ]
+  },
+  price_currency: "usd"
+}
+```
+
+<Tip>
+  Tiers must be continuous without gaps. The last tier can have `max_seats: null` for unlimited.
+</Tip>
+
+### Metered Pricing
+
+<Note>
+  Only available on subscription products.
+</Note>
+
+Usage-based pricing charged per billing cycle.
+
+```typescript
+{
+  amount_type: "metered_unit",
+  meter_id: "<meter_uuid>",
+  unit_amount: 0.05,      // $0.05 per unit
+  cap_amount: 10000,      // $100 maximum per cycle
+  price_currency: "usd"
+}
+```
+
+See [Usage-Based Billing](/features/usage-based-billing/introduction) for more details.
+
+## Multi-Currency Support
+
+Products can have prices in multiple currencies. Each currency must define the same price structure.
+
+```typescript
+prices: [
+  // USD pricing
+  { amount_type: "fixed", price_amount: 1900, price_currency: "usd" },
+  // EUR pricing
+  { amount_type: "fixed", price_amount: 1900, price_currency: "eur" },
+]
+```
+
+<Warning>
+  All currencies must have the same price types. You can't have a fixed price in USD and custom price in EUR.
+</Warning>
+
+## Product Benefits
+
+Attach benefits to products to automatically grant access to resources when purchased.
+
+```typescript
+await polar.products.updateBenefits(productId, {
+  benefits: [
+    benefitId1,  // License key benefit
+    benefitId2,  // Discord access benefit
+    benefitId3   // File download benefit
+  ]
+});
+```
+
+Benefits are automatically granted when:
+- A subscription starts
+- An order is paid
+- Seats are added (for seat-based products)
+
+See [Benefits](/features/benefits) for configuration options.
+
+## Product Media
+
+Add images and videos to showcase your product on checkout pages.
+
+<Steps>
+  <Step title="Upload media files">
+    Upload files through the dashboard or API. Files must be type `product_media`.
+  </Step>
+  <Step title="Attach to product">
+    ```typescript
+    await polar.products.update(productId, {
+      medias: [fileId1, fileId2, fileId3]
+    });
+    ```
+  </Step>
+  <Step title="Order matters">
+    Media displays in the order specified. The first image is the primary.
+  </Step>
+</Steps>
+
+## Custom Fields
+
+Collect additional information during checkout by attaching custom fields.
+
+```typescript
+await polar.products.update(productId, {
+  attached_custom_fields: [
+    {
+      custom_field_id: fieldId,
+      required: true
+    }
+  ]
+});
+```
+
+Custom field data is stored on orders and subscriptions for later access.
+
+## Product Visibility
+
+<Tabs>
+  <Tab title="Public">
+    Visible to everyone. Can be listed in your storefront and accessed via direct links.
+  </Tab>
+  <Tab title="Private">
+    Only accessible via direct checkout links. Won't appear in product listings.
+  </Tab>
+</Tabs>
+
+## Archiving Products
+
+Archive products to prevent new purchases while maintaining existing customers.
+
+```typescript
+await polar.products.update(productId, {
+  is_archived: true
+});
+```
+
+<Note>
+  Archived products:
+  - Cannot be purchased by new customers
+  - Existing subscriptions continue normally
+  - Benefits remain active for existing customers
+  - Associated checkout links are automatically archived
+</Note>
+
+## Updating Products
+
+Most product properties can be updated after creation:
+
+```typescript
+await polar.products.update(productId, {
+  name: "Updated Name",
+  description: "New description",
+  visibility: "private",
+  prices: [
+    { id: existingPriceId },  // Keep existing price
+    { /* new price schema */ }  // Add new price
+  ]
+});
+```
+
+<Warning>
+  Recurring interval cannot be changed after creation on modern products. Prices not included in the update are archived.
+</Warning>
+
+## Filtering & Searching
+
+List products with powerful filters:
+
+```typescript
+const { items } = await polar.products.list({
+  organization_id: [orgId],
+  is_archived: false,
+  is_recurring: true,
+  benefit_id: [benefitId],
+  query: "Pro",  // Search by name
+  metadata: { plan: "enterprise" }
+});
+```
+
+## Metadata
+
+Store arbitrary key-value data on products:
+
+```typescript
+await polar.products.create({
+  name: "Pro Plan",
+  metadata: {
+    plan_tier: "professional",
+    features: "unlimited",
+    internal_id: "prod-123"
+  },
+  // ... other fields
+});
+```
+
+Metadata is returned with all product queries and can be used for filtering.
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Price Management">
+    - Keep old prices in the array when adding new ones to maintain existing customers
+    - Use `is_archived` on the product rather than removing all prices
+    - Test price changes in sandbox mode first
+  </Accordion>
+
+  <Accordion title="Multi-Currency">
+    - Always include your organization's default currency
+    - Maintain price parity (adjust for purchasing power, not just conversion)
+    - Consider local payment methods for each currency
+  </Accordion>
+
+  <Accordion title="Benefits">
+    - Attach benefits before launching to avoid manual grants
+    - Test benefit fulfillment in sandbox mode
+    - Use benefit grants API to check active grants
+  </Accordion>
+
+  <Accordion title="Naming & Descriptions">
+    - Use clear, concise product names (3-64 characters)
+    - Include key features in the description
+    - Consider SEO for public products
+  </Accordion>
+</AccordionGroup>
+
+## API Reference
+
+<CardGroup cols={2}>
+  <Card title="Create Product" icon="plus" href="/api-reference/products">
+    Create a new product with prices
+  </Card>
+  <Card title="List Products" icon="list" href="/api-reference/products">
+    Query products with filters
+  </Card>
+  <Card title="Update Product" icon="pen" href="/api-reference/products">
+    Modify product details and prices
+  </Card>
+  <Card title="Update Benefits" icon="gift" href="/api-reference/products">
+    Manage product benefits
+  </Card>
+</CardGroup>

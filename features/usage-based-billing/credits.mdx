@@ -1,0 +1,603 @@
+---
+title: "Credits"
+description: "Manage prepaid credits and included allowances for usage-based billing"
+---
+
+Credits allow customers to prepay for usage or receive included allowances with their subscription. Polar automatically tracks credit balances and deducts consumption as events are ingested.
+
+## How Credits Work
+
+The credit system provides a balance-based approach to usage:
+
+<Steps>
+  <Step title="Credits are added">
+    Credits are added to a customer's meter balance through benefits or purchases
+  </Step>
+  <Step title="Usage is tracked">
+    As events matching the meter occur, consumed units are tracked
+  </Step>
+  <Step title="Balance is calculated">
+    Balance = Credited Units - Consumed Units
+  </Step>
+  <Step title="Access control (optional)">
+    Your application checks the balance to allow or restrict access
+  </Step>
+  <Step title="Overage billing">
+    At billing cycle end, any overage (negative balance) is invoiced
+  </Step>
+</Steps>
+
+## Customer Meter Structure
+
+Each customer-meter combination tracks:
+
+- **credited_units**: Total credits added (integer)
+- **consumed_units**: Total usage measured (decimal)
+- **balance**: Remaining credits (credited - consumed)
+- **activated_at**: When the meter became active for this customer
+
+## Adding Credits via Benefits
+
+Include credits with subscriptions using the "Meter Credit" benefit type.
+
+### Creating a Meter Credit Benefit
+
+<Steps>
+  <Step title="Navigate to your product">
+    Go to the product you want to add credits to
+  </Step>
+  <Step title="Add a benefit">
+    Create a new benefit and select "Meter Credit" as the type
+  </Step>
+  <Step title="Configure the benefit">
+    - **Meter**: Select which meter to credit
+    - **Units**: Number of credits to add (e.g., 10000)
+    - **Rollover**: Whether unused credits carry forward
+  </Step>
+</Steps>
+
+### Benefit Configuration
+
+```json
+{
+  "type": "meter_credit",
+  "properties": {
+    "meter_id": "01234567-89ab-cdef-0123-456789abcdef",
+    "units": 10000,
+    "rollover": false
+  }
+}
+```
+
+### Rollover Behavior
+
+#### Without Rollover (Default)
+
+Credits reset each billing cycle:
+
+<Tabs>
+  <Tab title="Cycle 1">
+    - **Start**: 10,000 credits added
+    - **Usage**: 7,500 consumed
+    - **End**: 2,500 unused
+    - **Rollover**: None
+  </Tab>
+  
+  <Tab title="Cycle 2">
+    - **Start**: 10,000 new credits (2,500 lost)
+    - **Usage**: 8,200 consumed
+    - **End**: 1,800 unused
+    - **Rollover**: None
+  </Tab>
+</Tabs>
+
+#### With Rollover Enabled
+
+Unused credits accumulate:
+
+<Tabs>
+  <Tab title="Cycle 1">
+    - **Start**: 10,000 credits added
+    - **Usage**: 7,500 consumed
+    - **End**: 2,500 unused
+    - **Rollover**: 2,500 to next cycle
+  </Tab>
+  
+  <Tab title="Cycle 2">
+    - **Start**: 10,000 new + 2,500 rollover = 12,500 credits
+    - **Usage**: 8,200 consumed
+    - **End**: 4,300 unused
+    - **Rollover**: 4,300 to next cycle
+  </Tab>
+</Tabs>
+
+## Credit Lifecycle
+
+### When Subscription Starts
+
+Polar automatically creates a `meter.credited` system event:
+
+```json
+{
+  "name": "meter.credited",
+  "source": "system",
+  "customer_id": "01234567-89ab-cdef-0123-456789abcdef",
+  "metadata": {
+    "meter_id": "01234567-89ab-cdef-0123-456789abcdef",
+    "units": 10000,
+    "rollover": false
+  }
+}
+```
+
+### When Subscription Cycles
+
+At the end of each billing cycle:
+
+<Steps>
+  <Step title="Meter is reset">
+    A `meter.reset` event is created, clearing the consumed units
+  </Step>
+  <Step title="Rollover is calculated">
+    If rollover is enabled, unused credits are calculated:
+    ```
+    rollover_units = max(0, credited_units - consumed_units)
+    ```
+  </Step>
+  <Step title="New credits are added">
+    A new `meter.credited` event adds the cycle's credits plus any rollover
+  </Step>
+</Steps>
+
+Example sequence:
+
+```json
+[
+  {
+    "name": "meter.reset",
+    "metadata": {
+      "meter_id": "01234567-89ab-cdef-0123-456789abcdef"
+    }
+  },
+  {
+    "name": "meter.credited",
+    "metadata": {
+      "meter_id": "01234567-89ab-cdef-0123-456789abcdef",
+      "units": 2500,
+      "rollover": true
+    }
+  },
+  {
+    "name": "meter.credited",
+    "metadata": {
+      "meter_id": "01234567-89ab-cdef-0123-456789abcdef",
+      "units": 10000,
+      "rollover": false
+    }
+  }
+]
+```
+
+### When Subscription is Upgraded
+
+If a customer upgrades to a plan with more credits:
+
+- Existing balance is preserved
+- New credit amount applies on the next cycle
+- No immediate credit adjustment (unless you manually add credits)
+
+### When Subscription is Canceled
+
+When a subscription is canceled:
+
+- Unused credits are forfeited (unless you have a refund policy)
+- Meter continues tracking usage until subscription ends
+- Final invoice includes any overages
+
+## Checking Customer Balances
+
+Retrieve a customer's meter balance:
+
+<CodeGroup>
+```python Python
+from polar_sdk import Polar
+
+client = Polar(access_token="polar_at_...")
+
+# Get all meters for a customer
+customer_meters = client.customer_meters.list(
+    customer_id=[customer_id]
+)
+
+for cm in customer_meters.items:
+    print(f"Meter: {cm.meter.name}")
+    print(f"Credited: {cm.credited_units}")
+    print(f"Consumed: {cm.consumed_units}")
+    print(f"Balance: {cm.balance}")
+    print()
+```
+
+```typescript TypeScript
+import { Polar } from "@polar-sh/sdk";
+
+const client = new Polar({
+  accessToken: "polar_at_...",
+});
+
+const customerMeters = await client.customerMeters.list({
+  customerId: [customerId],
+});
+
+for (const cm of customerMeters.items) {
+  console.log(`Meter: ${cm.meter.name}`);
+  console.log(`Credited: ${cm.creditedUnits}`);
+  console.log(`Consumed: ${cm.consumedUnits}`);
+  console.log(`Balance: ${cm.balance}`);
+  console.log();
+}
+```
+</CodeGroup>
+
+### Response Structure
+
+```json
+{
+  "items": [
+    {
+      "id": "01234567-89ab-cdef-0123-456789abcdef",
+      "customer_id": "01234567-89ab-cdef-0123-456789abcdef",
+      "meter_id": "01234567-89ab-cdef-0123-456789abcdef",
+      "credited_units": 10000,
+      "consumed_units": 7532.5,
+      "balance": 2467.5,
+      "created_at": "2024-03-01T00:00:00Z",
+      "modified_at": "2024-03-15T14:30:00Z",
+      "customer": {...},
+      "meter": {...}
+    }
+  ],
+  "pagination": {...}
+}
+```
+
+## Access Control Based on Balance
+
+Use the balance to gate access to your product:
+
+### Basic Check
+
+```python
+def can_make_request(customer_id: str) -> bool:
+    customer_meters = polar_client.customer_meters.list(
+        customer_id=[customer_id]
+    )
+    
+    # Check if customer has positive balance for API meter
+    for cm in customer_meters.items:
+        if cm.meter.name == "API Requests" and cm.balance > 0:
+            return True
+    
+    return False
+
+@app.post("/api/chat")
+async def chat(request: ChatRequest, customer_id: str):
+    if not can_make_request(customer_id):
+        raise HTTPException(
+            status_code=402,
+            detail="Insufficient credits. Please upgrade your plan."
+        )
+    
+    # Process request
+    return await process_chat(request)
+```
+
+### Soft Limits with Warnings
+
+```python
+def get_usage_info(customer_id: str) -> dict:
+    customer_meters = polar_client.customer_meters.list(
+        customer_id=[customer_id]
+    )
+    
+    for cm in customer_meters.items:
+        if cm.meter.name == "API Requests":
+            usage_percent = (cm.consumed_units / cm.credited_units) * 100
+            
+            return {
+                "credited": cm.credited_units,
+                "consumed": cm.consumed_units,
+                "remaining": cm.balance,
+                "usage_percent": usage_percent,
+                "warning": usage_percent > 80,
+                "critical": usage_percent > 95,
+            }
+    
+    return {"error": "No meter found"}
+
+@app.get("/api/usage")
+async def usage_info(customer_id: str):
+    info = get_usage_info(customer_id)
+    
+    if info.get("critical"):
+        info["message"] = "You've used 95% of your credits. Consider upgrading."
+    elif info.get("warning"):
+        info["message"] = "You've used 80% of your credits."
+    
+    return info
+```
+
+### Caching Balances
+
+For high-traffic applications, cache balances locally:
+
+```python
+import redis
+from datetime import timedelta
+
+redis_client = redis.Redis()
+
+def get_cached_balance(customer_id: str, meter_name: str) -> float | None:
+    key = f"balance:{customer_id}:{meter_name}"
+    cached = redis_client.get(key)
+    
+    if cached:
+        return float(cached)
+    
+    # Fetch from Polar
+    customer_meters = polar_client.customer_meters.list(
+        customer_id=[customer_id]
+    )
+    
+    for cm in customer_meters.items:
+        if cm.meter.name == meter_name:
+            # Cache for 5 minutes
+            redis_client.setex(
+                key,
+                timedelta(minutes=5),
+                str(cm.balance)
+            )
+            return cm.balance
+    
+    return None
+
+@app.post("/api/request")
+async def handle_request(customer_id: str):
+    balance = get_cached_balance(customer_id, "API Requests")
+    
+    if balance is None or balance <= 0:
+        raise HTTPException(status_code=402, detail="Insufficient credits")
+    
+    # Process request
+    # ...
+```
+
+## Manual Credit Adjustments
+
+While credits are typically managed through benefits, you can manually adjust them by creating `meter.credited` events:
+
+### Adding Credits
+
+```python
+# Grant 5000 bonus credits
+client.events.ingest(
+    events=[
+        {
+            "name": "meter.credited",
+            "source": "system",
+            "customer_id": customer_id,
+            "metadata": {
+                "meter_id": meter_id,
+                "units": 5000,
+                "rollover": True,
+                "reason": "Customer success bonus",
+            },
+        }
+    ]
+)
+```
+
+<Warning>
+  Manual credit events should use `source: "system"` and are typically only created by Polar itself. Use the benefits system for standard credit grants.
+</Warning>
+
+## Credit Expiration
+
+Polar doesn't have built-in credit expiration. To implement expiration:
+
+1. Track credit grant dates in your system
+2. Query customer meters periodically
+3. Create negative adjustment events for expired credits
+4. Notify customers before expiration
+
+## Prepaid Credit Packs
+
+Sell standalone credit packs using one-time products:
+
+<Steps>
+  <Step title="Create a one-time product">
+    Create a product with `is_recurring: false`
+  </Step>
+  <Step title="Add meter credit benefit">
+    Configure the credit amount (e.g., 50,000 credits for $100)
+  </Step>
+  <Step title="Enable rollover">
+    Set `rollover: true` so credits don't expire
+  </Step>
+  <Step title="Customer purchases">
+    Customer buys the credit pack like any other product
+  </Step>
+  <Step title="Credits are applied">
+    Polar automatically adds credits to the customer's meter
+  </Step>
+</Steps>
+
+Example product:
+
+```json
+{
+  "name": "50,000 API Credits",
+  "description": "Top up your API credits",
+  "is_recurring": false,
+  "prices": [
+    {
+      "type": "one_time",
+      "amount": 10000,
+      "currency": "usd"
+    }
+  ],
+  "benefits": [
+    {
+      "type": "meter_credit",
+      "properties": {
+        "meter_id": "01234567-89ab-cdef-0123-456789abcdef",
+        "units": 50000,
+        "rollover": true
+      }
+    }
+  ]
+}
+```
+
+## Credit History
+
+Track credit additions by querying `meter.credited` events:
+
+```python
+# Get all credit events for a customer
+events = client.events.list(
+    customer_id=[customer_id],
+    name=["meter.credited"],
+    source=["system"],
+)
+
+for event in events.items:
+    print(f"Date: {event.timestamp}")
+    print(f"Meter: {event.metadata['meter_id']}")
+    print(f"Units: {event.metadata['units']}")
+    print(f"Rollover: {event.metadata.get('rollover', False)}")
+    print()
+```
+
+## Multiple Meters per Customer
+
+Customers can have different balances for different meters:
+
+```python
+# Customer has multiple meter balances
+customer_meters = client.customer_meters.list(
+    customer_id=[customer_id]
+)
+
+for cm in customer_meters.items:
+    if cm.meter.name == "API Requests":
+        print(f"API Credits: {cm.balance}")
+    elif cm.meter.name == "Storage (GB)":
+        print(f"Storage Credits: {cm.balance} GB")
+    elif cm.meter.name == "Compute Hours":
+        print(f"Compute Credits: {cm.balance} hours")
+```
+
+Each meter has its own:
+- Independent balance
+- Separate rollover configuration
+- Distinct credit benefits
+
+## Best Practices
+
+### Credit Amounts
+
+- **Set realistic limits**: Match typical usage patterns
+- **Round numbers**: Use 1,000, 10,000, 100,000 instead of odd amounts
+- **Provide headroom**: Include 20-30% buffer over expected usage
+- **Test with users**: Validate amounts with beta customers
+
+### Rollover Strategy
+
+**Enable rollover when:**
+- Usage varies significantly month-to-month
+- You want to reward efficiency
+- Selling prepaid packs
+- Customer goodwill is important
+
+**Disable rollover when:**
+- You want predictable revenue
+- Credits represent time-based capacity
+- Implementation is simpler
+- Standard in your industry
+
+### User Experience
+
+- **Show balance prominently**: Display in your dashboard
+- **Send notifications**: Alert at 80%, 90%, 100% usage
+- **Explain overage charges**: Be transparent about billing
+- **Provide usage history**: Show daily/weekly trends
+- **Easy upgrades**: One-click path to more credits
+
+### Monitoring
+
+- **Track credit utilization**: Monitor average usage vs. credits
+- **Identify patterns**: Find customers who consistently over/under use
+- **Alert on anomalies**: Detect unusual consumption spikes
+- **Review rollover amounts**: Ensure balances don't grow indefinitely
+
+## Common Patterns
+
+### Freemium Model
+
+```
+Free Tier: 1,000 credits/month, no rollover
+Pro Tier: 10,000 credits/month, no rollover
+Enterprise: 100,000 credits/month, rollover enabled
+```
+
+### Pay-As-You-Go
+
+```
+Base Plan: $0/month, no included credits
+Credit Packs: 
+  - $10 for 5,000 credits (rollover)
+  - $50 for 30,000 credits (rollover)
+  - $100 for 75,000 credits (rollover)
+```
+
+### Hybrid Model
+
+```
+Starter: 5,000 included credits + $0.002/additional unit
+Pro: 25,000 included credits + $0.0015/additional unit  
+Enterprise: 200,000 included credits + $0.001/additional unit
+```
+
+## Troubleshooting
+
+### Balance Shows Zero
+
+1. **Check customer meter exists**: Query customer_meters endpoint
+2. **Verify benefit is granted**: Look for `benefit.granted` events
+3. **Confirm subscription is active**: Check subscription status
+4. **Review meter activation**: Check `activated_at` timestamp
+
+### Credits Not Adding
+
+1. **Verify meter_id matches**: Ensure benefit references correct meter
+2. **Check event ingestion**: Look for `meter.credited` events
+3. **Review benefit properties**: Confirm units and meter_id are set
+4. **Test benefit grant**: Manually trigger benefit grant
+
+### Balance Incorrect
+
+1. **Check for duplicate events**: Use `external_id` for deduplication
+2. **Verify consumption calculation**: Query meter quantities
+3. **Review reset events**: Look for unexpected `meter.reset` events
+4. **Audit credit events**: List all `meter.credited` events
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Billing" icon="file-invoice-dollar" href="/features/usage-based-billing/billing">
+    Learn how credits integrate with billing cycles
+  </Card>
+  <Card title="Customer Meters API" icon="code" href="/api-reference/customer-meters">
+    API reference for checking balances
+  </Card>
+</CardGroup>

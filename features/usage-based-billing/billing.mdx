@@ -1,0 +1,614 @@
+---
+title: "Billing & Invoicing"
+description: "Generate invoices from metered consumption and manage billing cycles"
+---
+
+Polar automatically converts metered consumption into billing entries and generates invoices at the end of each billing cycle.
+
+## Billing Workflow
+
+Here's how usage-based billing flows from events to invoices:
+
+<Steps>
+  <Step title="Events are ingested">
+    Your application sends usage events throughout the billing period
+  </Step>
+  <Step title="Meters aggregate events">
+    Meters filter and aggregate events to calculate consumed units
+  </Step>
+  <Step title="Billing entries are created">
+    For metered prices, billing entries track consumption by time period
+  </Step>
+  <Step title="Billing cycle ends">
+    Subscription reaches the end of its billing period
+  </Step>
+  <Step title="Consumption is calculated">
+    Polar calculates total consumption minus any included credits
+  </Step>
+  <Step title="Invoice is generated">
+    An invoice is created with subscription fees plus metered charges
+  </Step>
+  <Step title="Meter resets">
+    After invoicing, meters reset for the next billing cycle
+  </Step>
+</Steps>
+
+## Billing Entries
+
+Billing entries are created during a billing period to track what will be invoiced.
+
+### Entry Types
+
+| Type | Description | When Created |
+|------|-------------|-------------|
+| `cycle` | Regular subscription fee | Start of billing cycle |
+| `proration` | Partial period charge/credit | Subscription changes |
+| `metered` | Usage-based consumption | As events occur |
+| `subscription_seats_increase` | Additional seats added | Seat count increases |
+| `subscription_seats_decrease` | Seats removed (credit) | Seat count decreases |
+
+### Billing Entry Structure
+
+```json
+{
+  "id": "01234567-89ab-cdef-0123-456789abcdef",
+  "type": "metered",
+  "direction": "debit",
+  "start_timestamp": "2024-03-01T00:00:00Z",
+  "end_timestamp": "2024-03-15T14:30:00Z",
+  "amount": null,
+  "currency": null,
+  "customer_id": "01234567-89ab-cdef-0123-456789abcdef",
+  "subscription_id": "01234567-89ab-cdef-0123-456789abcdef",
+  "product_price_id": "01234567-89ab-cdef-0123-456789abcdef",
+  "event_id": "01234567-89ab-cdef-0123-456789abcdef",
+  "order_item_id": null
+}
+```
+
+### Metered Billing Entries
+
+For metered consumption:
+
+- **amount**: `null` until invoiced (calculated at billing cycle end)
+- **start_timestamp**: When consumption started being tracked
+- **end_timestamp**: When the event occurred
+- **event_id**: Reference to the usage event
+
+Entries are created as events are ingested and linked to the active subscription.
+
+## Metered Pricing Configuration
+
+Define how consumption is priced using product prices with metered units.
+
+### Creating a Metered Price
+
+When creating a product price, link it to a meter and define pricing tiers:
+
+```json
+{
+  "type": "recurring",
+  "recurring_interval": "month",
+  "price_amount": 4900,
+  "price_currency": "usd",
+  "metered_unit": {
+    "meter_id": "01234567-89ab-cdef-0123-456789abcdef",
+    "tiers": [
+      {
+        "first_unit": 0,
+        "last_unit": null,
+        "unit_price_amount": 1
+      }
+    ]
+  }
+}
+```
+
+This creates:
+- Base subscription: $49.00/month
+- Metered usage: $0.01 per unit (after included credits)
+
+### Pricing Models
+
+#### Flat Per-Unit Pricing
+
+Single rate for all units:
+
+```json
+{
+  "metered_unit": {
+    "meter_id": "01234567-89ab-cdef-0123-456789abcdef",
+    "tiers": [
+      {
+        "first_unit": 0,
+        "last_unit": null,
+        "unit_price_amount": 100
+      }
+    ]
+  }
+}
+```
+
+**Example:**
+- Usage: 1,500 units
+- Rate: $1.00 per unit
+- Charge: 1,500 × $1.00 = **$1,500.00**
+
+#### Tiered Pricing
+
+Different rates for usage ranges:
+
+```json
+{
+  "metered_unit": {
+    "meter_id": "01234567-89ab-cdef-0123-456789abcdef",
+    "tiers": [
+      {
+        "first_unit": 0,
+        "last_unit": 1000,
+        "unit_price_amount": 100
+      },
+      {
+        "first_unit": 1001,
+        "last_unit": 10000,
+        "unit_price_amount": 80
+      },
+      {
+        "first_unit": 10001,
+        "last_unit": null,
+        "unit_price_amount": 50
+      }
+    ]
+  }
+}
+```
+
+**Example:**
+- Usage: 12,500 units
+- First 1,000: 1,000 × $1.00 = $1,000
+- Next 9,000: 9,000 × $0.80 = $7,200
+- Next 2,500: 2,500 × $0.50 = $1,250
+- **Total: $9,450.00**
+
+#### Volume Pricing
+
+Rate applies to all units based on total:
+
+```json
+{
+  "metered_unit": {
+    "meter_id": "01234567-89ab-cdef-0123-456789abcdef",
+    "pricing_type": "volume",
+    "tiers": [
+      {
+        "first_unit": 0,
+        "last_unit": 1000,
+        "unit_price_amount": 100
+      },
+      {
+        "first_unit": 1001,
+        "last_unit": 10000,
+        "unit_price_amount": 80
+      },
+      {
+        "first_unit": 10001,
+        "last_unit": null,
+        "unit_price_amount": 50
+      }
+    ]
+  }
+}
+```
+
+**Example:**
+- Usage: 12,500 units
+- Total volume tier: 10,001+
+- Charge: 12,500 × $0.50 = **$6,250.00**
+
+## Billing Cycle
+
+### Cycle Start
+
+When a billing cycle begins:
+
+1. **Subscription renews**: New cycle starts
+2. **Credits are added**: Meter credit benefits grant units
+3. **Entries are created**: `cycle` entry for base subscription fee
+4. **Tracking begins**: Metered billing entries start accumulating
+
+### During the Cycle
+
+As events occur:
+
+1. **Events ingested**: Usage events sent to Polar
+2. **Meters updated**: Customer meter balance updated
+3. **Entries created**: Metered billing entry for each event
+4. **Balance tracked**: Running total of consumption
+
+### Cycle End
+
+When the billing cycle completes:
+
+<Steps>
+  <Step title="Calculate consumption">
+    Sum all metered billing entries for the period
+  </Step>
+  <Step title="Apply pricing">
+    Calculate amount based on consumption and pricing tiers
+  </Step>
+  <Step title="Generate line items">
+    Convert billing entries to order line items
+  </Step>
+  <Step title="Create invoice">
+    Generate invoice with subscription + metered charges
+  </Step>
+  <Step title="Reset meters">
+    Create `meter.reset` events to clear consumption
+  </Step>
+  <Step title="Add new credits">
+    Grant credits for the new cycle (with rollover if enabled)
+  </Step>
+</Steps>
+
+## Invoice Generation
+
+Invoices combine subscription fees with metered charges.
+
+### Invoice Structure
+
+```json
+{
+  "id": "01234567-89ab-cdef-0123-456789abcdef",
+  "invoice_number": "ACME-C001-0042",
+  "customer_id": "01234567-89ab-cdef-0123-456789abcdef",
+  "subscription_id": "01234567-89ab-cdef-0123-456789abcdef",
+  "billing_reason": "subscription_cycle",
+  "amount": 7150,
+  "tax_amount": 0,
+  "currency": "usd",
+  "items": [
+    {
+      "label": "Pro Plan — From Mar 01, 2024 to Mar 31, 2024",
+      "amount": 4900,
+      "proration": false
+    },
+    {
+      "label": "API Requests (2,500 units × $0.01)",
+      "amount": 2500,
+      "proration": false
+    },
+    {
+      "label": "Storage (125 GB × $0.02)",
+      "amount": 250,
+      "proration": false
+    }
+  ],
+  "created_at": "2024-03-31T23:59:59Z"
+}
+```
+
+### Line Item Labels
+
+Polar automatically generates descriptive labels:
+
+**For metered usage:**
+```
+{meter_name} ({consumed_units} units × ${unit_price})
+```
+
+Examples:
+- `API Requests (12,500 units × $0.001)`
+- `GPT-4 Tokens (250,000 tokens × $0.00003)`
+- `Storage (156.7 GB × $0.10)`
+
+**With included credits:**
+```
+{meter_name} ({total_consumed} units, {included} included, {overage} × ${unit_price})
+```
+
+Example:
+- `API Requests (12,500 units, 10,000 included, 2,500 × $0.001)`
+
+### Billing Reasons
+
+| Reason | Description |
+|--------|-------------|
+| `subscription_create` | First invoice for new subscription |
+| `subscription_cycle` | Regular billing cycle renewal |
+| `subscription_update` | Immediate charge from plan change |
+
+## Aggregation and Summability
+
+How consumption is calculated depends on the meter's aggregation function.
+
+### Summable Aggregations
+
+**Count** and **Sum** aggregations are summable:
+- Can be computed per price tier
+- Can be summed across price changes
+
+Example: Customer starts with Price A ($0.01/unit), then upgrades to Price B ($0.008/unit):
+
+```
+Period 1 (Price A): 5,000 units × $0.01 = $50.00
+Period 2 (Price B): 7,000 units × $0.008 = $56.00
+Total: $106.00
+```
+
+### Non-Summable Aggregations
+
+**Max**, **Min**, **Avg**, and **Unique** are non-summable:
+- Must be computed across ALL events in the period
+- Billed at currently active price
+
+Example: Peak concurrent users with price change:
+
+```
+Period 1 (Price A): Max 50 users
+Period 2 (Price B): Max 75 users
+Overall Max: 75 users (billed at current Price B)
+```
+
+<Warning>
+  If a customer changes from a non-summable metered price and doesn't have that meter in their new price, consumption is not billed. This prevents billing discontinued metrics.
+</Warning>
+
+## Mid-Cycle Price Changes
+
+When a customer changes subscription prices mid-cycle:
+
+### Proration for Static Prices
+
+```
+Old Price: $100/month (used 10 days of 30)
+New Price: $200/month (will use 20 days of 30)
+
+Credit: -$100 × (20/30) = -$66.67
+Charge: +$200 × (20/30) = +$133.33
+Net: $66.66 immediate charge
+```
+
+### Metered Prices
+
+For metered consumption:
+
+**Summable aggregations:**
+- Past consumption remains at old price
+- New consumption uses new price
+- Both billed at cycle end
+
+**Non-summable aggregations:**
+- All consumption billed at current active price
+- Past billing entries not re-calculated
+- Overall aggregate (max/min/avg/unique) used
+
+## Customer Meter Balance vs. Billing
+
+It's important to understand the relationship:
+
+### Customer Meter
+
+- Tracks real-time balance
+- Credits - Consumed = Balance
+- Used for access control
+- Updates immediately as events occur
+
+### Billing Entries
+
+- Track what will be charged
+- Created for billable consumption
+- Amount calculated at cycle end
+- Accounts for included credits
+
+### Example
+
+Subscription includes 10,000 API credits, metered at $0.001/additional:
+
+| Time | Events | Customer Meter | Billing |
+|------|--------|----------------|----------|
+| Day 1 | 0 sent | Credited: 10,000<br/>Consumed: 0<br/>Balance: 10,000 | No entries |
+| Day 15 | 7,500 | Credited: 10,000<br/>Consumed: 7,500<br/>Balance: 2,500 | 7,500 metered entries<br/>(within included) |
+| Day 30 | 12,500 | Credited: 10,000<br/>Consumed: 12,500<br/>Balance: -2,500 | 12,500 metered entries<br/>Invoice: 2,500 × $0.001 = **$2.50** |
+
+## Viewing Billing Entries
+
+While there's no direct API endpoint for billing entries, you can understand what will be billed:
+
+### Query Meter Consumption
+
+```python
+# Get consumption for current billing period
+from datetime import datetime, timezone
+
+current_period_start = subscription.current_period_start
+current_period_end = subscription.current_period_end
+
+quantities = client.meters.quantities(
+    id=meter_id,
+    start_timestamp=current_period_start,
+    end_timestamp=current_period_end,
+    customer_id=[customer_id],
+)
+
+print(f"Consumed this cycle: {quantities.total}")
+```
+
+### Check Customer Meter
+
+```python
+# Get current balance
+customer_meters = client.customer_meters.list(
+    customer_id=[customer_id],
+    meter_id=[meter_id],
+)
+
+for cm in customer_meters.items:
+    overage = max(0, cm.consumed_units - cm.credited_units)
+    print(f"Consumed: {cm.consumed_units}")
+    print(f"Included: {cm.credited_units}")
+    print(f"Overage: {overage}")
+```
+
+### Estimate Charges
+
+```python
+def estimate_metered_charges(meter_id: str, customer_id: str) -> float:
+    # Get meter and price configuration
+    meter = client.meters.get(id=meter_id)
+    
+    # Get consumption
+    customer_meter = client.customer_meters.list(
+        customer_id=[customer_id],
+        meter_id=[meter_id],
+    ).items[0]
+    
+    # Calculate overage
+    overage = max(0, customer_meter.consumed_units - customer_meter.credited_units)
+    
+    # Apply pricing (simplified - assumes flat rate)
+    # In reality, you'd need to fetch the product price and apply tiering
+    unit_price = 0.001  # $0.001 per unit
+    
+    return overage * unit_price
+```
+
+## Invoice Events
+
+Polar emits events when invoices are generated:
+
+```json
+{
+  "name": "order.paid",
+  "source": "system",
+  "customer_id": "01234567-89ab-cdef-0123-456789abcdef",
+  "metadata": {
+    "order_id": "01234567-89ab-cdef-0123-456789abcdef",
+    "subscription_id": "01234567-89ab-cdef-0123-456789abcdef"
+  }
+}
+```
+
+Use webhooks to be notified of invoice events and trigger actions in your system.
+
+## Best Practices
+
+### Transparent Pricing
+
+- **Show unit prices clearly**: Display on your pricing page
+- **Explain included credits**: Make base allowance obvious
+- **Provide examples**: Show sample usage calculations
+- **Update estimates**: Show real-time usage in dashboard
+
+### Customer Communication
+
+- **Mid-cycle alerts**: Notify at 50%, 80%, 100% of credits
+- **Pre-invoice summary**: Email usage summary before billing
+- **Invoice details**: Break down charges clearly
+- **Usage analytics**: Provide daily/weekly usage reports
+
+### Pricing Strategy
+
+- **Include base credits**: Makes pricing easier to understand
+- **Use round numbers**: $0.001, $0.01, $0.10 instead of $0.00873
+- **Tier thoughtfully**: Align tiers with customer segments
+- **Test pricing**: A/B test different rate structures
+
+### Technical Implementation
+
+- **Monitor for anomalies**: Alert on unusual spikes
+- **Validate before invoicing**: Review high consumption before charging
+- **Handle edge cases**: Consider rounding, minimums, maximums
+- **Archive old data**: Keep historical billing data accessible
+
+## Common Scenarios
+
+### Freemium to Paid
+
+Customer starts on free plan, upgrades mid-month:
+
+```
+Day 1-15: Free plan (1,000 included credits)
+  - Used: 950 credits
+  - Charged: $0
+
+Day 16-30: Pro plan ($49/month, 10,000 credits)
+  - Proration: $49 × (15/30) = $24.50
+  - Used: 3,200 credits
+  - Charged: $24.50 (no overage)
+
+Total Invoice: $24.50
+```
+
+### Overage Scenario
+
+Customer exceeds included credits:
+
+```
+Plan: $99/month + 50,000 credits + $0.001/additional
+
+Usage: 67,500 units
+Included: 50,000 units
+Overage: 17,500 units
+
+Base: $99.00
+Overage: 17,500 × $0.001 = $17.50
+Total: $116.50
+```
+
+### Multi-Meter Billing
+
+Customer has multiple metered prices:
+
+```
+Base Plan: $199/month
+
+API Requests:
+  - Included: 100,000
+  - Used: 125,000
+  - Overage: 25,000 × $0.0005 = $12.50
+
+Storage:
+  - Included: 100 GB
+  - Used: 87 GB
+  - Overage: $0
+
+Compute:
+  - Included: 0 hours
+  - Used: 45 hours × $0.50 = $22.50
+
+Total: $199 + $12.50 + $22.50 = $234.00
+```
+
+## Troubleshooting
+
+### Usage Not Appearing on Invoice
+
+1. **Check billing cycle**: Events must occur during the cycle
+2. **Verify meter is linked**: Price must reference the meter
+3. **Confirm price is active**: Subscription must include the metered price
+4. **Review filter**: Ensure events match meter filter
+
+### Incorrect Amount Charged
+
+1. **Verify pricing tiers**: Check tier boundaries and rates
+2. **Check included credits**: Ensure credits are applied
+3. **Review aggregation**: Confirm aggregation function is correct
+4. **Inspect events**: Count actual events for the period
+
+### Meter Didn't Reset
+
+1. **Check reset event**: Look for `meter.reset` after invoice
+2. **Verify cycle completion**: Ensure billing cycle actually ended
+3. **Review subscription status**: Canceled subscriptions don't reset
+4. **Check for errors**: Review logs for reset failures
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Orders API" icon="file-invoice" href="/api-reference/orders">
+    Access invoice and order data
+  </Card>
+  <Card title="Webhooks" icon="webhook" href="/webhooks">
+    Get notified of billing events
+  </Card>
+</CardGroup>

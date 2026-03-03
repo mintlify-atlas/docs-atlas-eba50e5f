@@ -1,0 +1,436 @@
+---
+title: "Checkout"
+description: "Create checkout sessions for seamless payment collection"
+---
+
+Checkout sessions provide a secure, hosted payment flow for your products. Create one-time or subscription checkout experiences that handle payment processing, tax calculation, and customer management.
+
+## Overview
+
+Checkout sessions are temporary payment flows that:
+
+- Expire after 30 days (configurable)
+- Support multiple products and prices
+- Handle tax calculation automatically
+- Process payments via Stripe
+- Create orders and subscriptions upon success
+- Grant benefits automatically
+
+## Creating Checkout Sessions
+
+Create checkout sessions programmatically via API or from checkout links.
+
+<Tabs>
+  <Tab title="API">
+    ```typescript
+    const checkout = await polar.checkouts.custom.create({
+      products: [productId1, productId2],
+      customer_email: "customer@example.com",
+      success_url: "https://example.com/success?checkout_id={CHECKOUT_ID}",
+      metadata: {
+        user_id: "user_123"
+      }
+    });
+    ```
+  </Tab>
+  <Tab title="Client-side">
+    ```typescript
+    // From your frontend (requires authentication)
+    const checkout = await polar.checkouts.custom.client.create({
+      product_id: productId,
+      customer_email: "customer@example.com"
+    });
+    
+    // Redirect to checkout
+    window.location.href = `https://polar.sh/checkout/${checkout.client_secret}`;
+    ```
+  </Tab>
+</Tabs>
+
+## Checkout Configuration
+
+### Products & Pricing
+
+Configure which products customers can purchase:
+
+```typescript
+{
+  products: [productId1, productId2],  // Multiple products
+  currency: "usd",                     // Optional: force currency
+  amount: 5000,                        // Custom amount (for custom pricing only)
+}
+```
+
+<Note>
+  When multiple products are provided, customers can switch between them in the checkout UI.
+</Note>
+
+### Customer Pre-fill
+
+Pre-populate customer information for faster checkout:
+
+```typescript
+{
+  customer_id: existingCustomerId,           // Link to existing customer
+  external_customer_id: "user_123",          // Or use your external ID
+  customer_email: "customer@example.com",
+  customer_name: "Jane Doe",
+  customer_billing_address: {
+    line1: "123 Main St",
+    city: "San Francisco",
+    state: "CA",
+    postal_code: "94102",
+    country: "US"
+  },
+  customer_tax_id: "GB123456789",            // VAT/Tax ID
+  customer_metadata: {                       // Copied to created customer
+    source: "website",
+    campaign: "summer_sale"
+  }
+}
+```
+
+### Billing Requirements
+
+<Tabs>
+  <Tab title="Standard">
+    By default, customers only need to provide their country for tax calculation.
+    
+    ```typescript
+    { require_billing_address: false }
+    ```
+  </Tab>
+  <Tab title="Full Address">
+    Require complete billing address (automatic for US customers).
+    
+    ```typescript
+    { require_billing_address: true }
+    ```
+  </Tab>
+  <Tab title="Business">
+    Mark as business customer to require billing name and address.
+    
+    ```typescript
+    {
+      is_business_customer: true,
+      customer_billing_name: "Acme Corp",
+      customer_tax_id: "GB123456789"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Seat-Based Configuration
+
+For seat-based products, control the seat selection:
+
+```typescript
+{
+  seats: 10,           // Pre-select 10 seats
+  min_seats: 5,        // Minimum selectable
+  max_seats: 50        // Maximum selectable
+}
+```
+
+### Trials
+
+Control trial availability at checkout:
+
+```typescript
+{
+  allow_trial: false,           // Disable trial even if product has one
+  trial_interval: "day",        // Override product trial
+  trial_interval_count: 14      // 14-day trial
+}
+```
+
+<Warning>
+  Customers can only redeem one trial per product. Attempting to use another trial will fail.
+</Warning>
+
+### Discounts
+
+Apply discounts or allow discount codes:
+
+```typescript
+{
+  discount_id: discountId,       // Pre-apply specific discount
+  allow_discount_codes: true     // Allow customers to enter codes
+}
+```
+
+### Redirects
+
+```typescript
+{
+  success_url: "https://example.com/success?checkout_id={CHECKOUT_ID}",
+  return_url: "https://example.com",  // Back button URL
+  embed_origin: "https://example.com" // For iframe embedding
+}
+```
+
+<Tip>
+  Use `{CHECKOUT_ID}` in `success_url` to retrieve the checkout ID after success.
+</Tip>
+
+## Checkout Flow
+
+<Steps>
+  <Step title="Create Session">
+    Create a checkout session via API with product and customer details.
+  </Step>
+  <Step title="Customer Entry">
+    Customer lands on checkout page and sees product details, pricing, and benefits.
+  </Step>
+  <Step title="Fill Details">
+    Customer provides email, billing address, and payment information.
+  </Step>
+  <Step title="Tax Calculation">
+    Taxes are calculated based on customer location and product type.
+  </Step>
+  <Step title="Payment Processing">
+    Payment is processed via Stripe. 3DS authentication if required.
+  </Step>
+  <Step title="Confirmation">
+    - Order/subscription created
+    - Benefits granted
+    - Confirmation email sent
+    - Redirect to success URL
+  </Step>
+</Steps>
+
+## Checkout Status
+
+Checkouts progress through these statuses:
+
+<Tabs>
+  <Tab title="open">
+    Initial state. Customer can complete checkout.
+  </Tab>
+  <Tab title="confirmed">
+    Payment confirmed, processing order/subscription.
+  </Tab>
+  <Tab title="succeeded">
+    Successfully completed. Order/subscription created.
+  </Tab>
+  <Tab title="failed">
+    Payment failed or processing error occurred.
+  </Tab>
+  <Tab title="expired">
+    Checkout expired (30 days by default).
+  </Tab>
+</Tabs>
+
+## Updating Checkout Sessions
+
+Update open checkout sessions to modify configuration:
+
+```typescript
+await polar.checkouts.custom.update(checkoutId, {
+  customer_email: "updated@example.com",
+  customer_billing_address: { /* ... */ },
+  amount: 7500  // Update custom amount
+});
+```
+
+<Warning>
+  Only `open` checkouts can be updated. Confirmed, succeeded, or failed checkouts are immutable.
+</Warning>
+
+## Client-Side Access
+
+Access checkout sessions from your frontend using the client secret:
+
+```typescript
+// Get checkout details
+const checkout = await polar.checkouts.custom.client.get(clientSecret);
+
+// Update customer information
+await polar.checkouts.custom.client.update(clientSecret, {
+  customer_email: "customer@example.com"
+});
+
+// Confirm payment (after Stripe payment intent)
+await polar.checkouts.custom.client.confirm(clientSecret, {
+  confirmation_token_id: stripeConfirmationToken
+});
+```
+
+## Embedding Checkout
+
+Embed checkout in an iframe for seamless integration:
+
+<Steps>
+  <Step title="Set embed origin">
+    ```typescript
+    const checkout = await polar.checkouts.custom.create({
+      product_id: productId,
+      embed_origin: "https://yourdomain.com"
+    });
+    ```
+  </Step>
+  <Step title="Create iframe">
+    ```html
+    <iframe
+      src="https://polar.sh/checkout/{client_secret}"
+      width="100%"
+      height="800px"
+      frameborder="0"
+    ></iframe>
+    ```
+  </Step>
+  <Step title="Listen for events">
+    ```javascript
+    window.addEventListener('message', (event) => {
+      if (event.origin !== 'https://polar.sh') return;
+      
+      if (event.data.type === 'checkout.succeeded') {
+        console.log('Checkout completed!', event.data.checkout_id);
+      }
+    });
+    ```
+  </Step>
+</Steps>
+
+## Custom Fields
+
+Collect additional data via custom fields attached to products:
+
+```typescript
+// Custom field values are submitted during checkout
+// and stored on the resulting order/subscription
+{
+  custom_field_data: {
+    [fieldId]: "Customer's response"
+  }
+}
+```
+
+## Subscription Upgrades
+
+Upgrade free subscriptions to paid tiers via checkout:
+
+```typescript
+{
+  subscription_id: freeSubscriptionId,
+  product_id: paidProductId
+}
+```
+
+<Note>
+  Only free subscriptions can be upgraded via checkout. Paid subscription changes use the subscriptions API.
+</Note>
+
+## Metadata
+
+Store custom data on checkout sessions:
+
+```typescript
+{
+  metadata: {
+    order_source: "website",
+    affiliate_id: "aff_123",
+    campaign: "summer_2024"
+  }
+}
+```
+
+Metadata is:
+- Copied to created orders and subscriptions
+- Included in webhooks
+- Searchable via API
+
+## Event Streaming
+
+Subscribe to real-time checkout updates via Server-Sent Events:
+
+```typescript
+const eventSource = new EventSource(
+  `https://api.polar.sh/v1/checkouts/custom/client/${clientSecret}/stream`
+);
+
+eventSource.addEventListener('checkout.updated', (event) => {
+  const checkout = JSON.parse(event.data);
+  console.log('Status:', checkout.status);
+});
+```
+
+## Payment Methods
+
+Polar uses Stripe to process payments and supports:
+
+- Credit/debit cards (Visa, Mastercard, Amex, etc.)
+- Apple Pay & Google Pay
+- SEPA Direct Debit (EUR)
+- ACH Direct Debit (USD)
+- Link (Stripe's one-click checkout)
+
+Payment methods are automatically shown based on customer location and currency.
+
+## Tax Handling
+
+Taxes are automatically calculated based on:
+
+- Customer billing address
+- Customer IP address (fallback)
+- Product tax category
+- Merchant of record jurisdiction
+
+See [Merchant of Record](/merchant-of-record/introduction) for tax details.
+
+## Error Handling
+
+<AccordionGroup>
+  <Accordion title="Payment Failed">
+    Status changes to `failed`. Customer can retry with a different payment method.
+  </Accordion>
+  <Accordion title="Already Active Subscription">
+    Returns `403` if customer already has an active subscription to the product.
+  </Accordion>
+  <Accordion title="Expired Checkout">
+    Returns `410`. Create a new checkout session.
+  </Accordion>
+  <Accordion title="Trial Already Redeemed">
+    Returns `403` if customer attempts to use a trial they've already redeemed.
+  </Accordion>
+  <Accordion title="Organization Not Ready">
+    Returns `403` if the organization isn't configured to accept payments.
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Pre-fill Customer Data">
+    Pre-fill email and billing information when possible to reduce friction and increase conversion.
+  </Accordion>
+  <Accordion title="Use Metadata">
+    Store tracking information (campaign IDs, affiliate codes, etc.) in metadata for attribution.
+  </Accordion>
+  <Accordion title="Success URLs">
+    Always provide a success_url to redirect customers after payment. Include `{CHECKOUT_ID}` to retrieve details.
+  </Accordion>
+  <Accordion title="Handle Webhooks">
+    Listen for `checkout.succeeded` webhooks rather than relying solely on redirects.
+  </Accordion>
+  <Accordion title="Test in Sandbox">
+    Use sandbox mode to test the full checkout flow before going live.
+  </Accordion>
+</AccordionGroup>
+
+## API Reference
+
+<CardGroup cols={2}>
+  <Card title="Create Checkout" icon="plus" href="/api-reference/checkouts">
+    Create a new checkout session
+  </Card>
+  <Card title="Get Checkout" icon="eye" href="/api-reference/checkouts">
+    Retrieve checkout details
+  </Card>
+  <Card title="Update Checkout" icon="pen" href="/api-reference/checkouts">
+    Modify open checkout session
+  </Card>
+  <Card title="Confirm Checkout" icon="check" href="/api-reference/checkouts">
+    Process payment and complete
+  </Card>
+</CardGroup>

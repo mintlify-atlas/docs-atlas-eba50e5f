@@ -1,33 +1,273 @@
 ---
-title: 'Introduction'
-description: 'Example section for showcasing API endpoints'
+title: API Reference
+description: Complete reference for the Polar API
 ---
 
-<Note>
-  If you're not looking to build API reference documentation, you can delete
-  this section by removing the api-reference folder.
-</Note>
+## Introduction
 
-## Welcome
+The Polar API allows you to programmatically manage your payment infrastructure, including products, subscriptions, customers, orders, and more.
 
-There are two ways to build API documentation: [OpenAPI](https://mintlify.com/docs/api-playground/openapi/setup) and [MDX components](https://mintlify.com/docs/api-playground/mdx/configuration). For the starter kit, we are using the following OpenAPI specification.
+## Base URL
 
-<Card
-  title="Plant Store Endpoints"
-  icon="leaf"
-  href="https://github.com/mintlify/starter/blob/main/api-reference/openapi.json"
->
-  View the OpenAPI specification file
-</Card>
+All API requests should be made to:
+
+```
+https://api.polar.sh/v1
+```
 
 ## Authentication
 
-All API endpoints are authenticated using Bearer tokens and picked up from the specification file.
+Polar supports multiple authentication methods:
+
+### Personal Access Tokens
+
+Create a Personal Access Token (PAT) from your Polar dashboard and include it in the `Authorization` header:
+
+```bash
+curl https://api.polar.sh/v1/products \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Organization Access Tokens
+
+For organization-scoped operations, use an Organization Access Token:
+
+```bash
+curl https://api.polar.sh/v1/products \
+  -H "Authorization: Bearer polar_oat_..."
+```
+
+### OAuth 2.0
+
+Polar supports OAuth 2.0 for third-party integrations. See our [OAuth documentation](/integrate/oauth2/introduction) for details.
+
+## Request Format
+
+### Content Type
+
+All POST, PATCH, and PUT requests should use JSON:
+
+```bash
+curl -X POST https://api.polar.sh/v1/products \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Premium Plan"}'
+```
+
+### Query Parameters
+
+GET requests use query parameters for filtering:
+
+```bash
+curl "https://api.polar.sh/v1/products?organization_id=abc123&is_archived=false" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+## Response Format
+
+### Success Responses
+
+Successful responses return JSON with the requested data:
 
 ```json
-"security": [
-  {
-    "bearerAuth": []
-  }
-]
+{
+  "id": "prod_123",
+  "name": "Premium Plan",
+  "created_at": "2024-01-15T10:30:00Z"
+}
 ```
+
+### List Responses
+
+List endpoints return paginated results:
+
+```json
+{
+  "items": [
+    {"id": "prod_123", "name": "Premium Plan"},
+    {"id": "prod_456", "name": "Basic Plan"}
+  ],
+  "pagination": {
+    "total_count": 42,
+    "page": 1,
+    "page_size": 20
+  }
+}
+```
+
+## Pagination
+
+List endpoints support pagination via query parameters:
+
+<ParamField query="page" type="integer" default="1">
+  Page number (1-indexed)
+</ParamField>
+
+<ParamField query="limit" type="integer" default="20">
+  Number of items per page (max 100)
+</ParamField>
+
+Example:
+
+```bash
+curl "https://api.polar.sh/v1/products?page=2&limit=50" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+## Sorting
+
+Many list endpoints support sorting:
+
+<ParamField query="sorting" type="array">
+  Array of sort criteria. Prefix with `-` for descending order.
+</ParamField>
+
+Example:
+
+```bash
+# Sort by created_at descending, then name ascending
+curl "https://api.polar.sh/v1/products?sorting=-created_at&sorting=name" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+## Filtering
+
+List endpoints support various filters specific to each resource. Common filters include:
+
+- `organization_id` - Filter by organization
+- `query` - Text search
+- `is_archived` - Include/exclude archived items
+
+## Metadata
+
+Many resources support custom metadata for storing additional key-value pairs:
+
+```json
+{
+  "name": "Premium Plan",
+  "metadata": {
+    "internal_id": "plan-001",
+    "tier": "premium"
+  }
+}
+```
+
+Filter by metadata using dot notation:
+
+```bash
+curl "https://api.polar.sh/v1/products?metadata.tier=premium" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+## Error Responses
+
+Errors return appropriate HTTP status codes and a JSON response:
+
+```json
+{
+  "type": "ResourceNotFound",
+  "detail": "Product not found."
+}
+```
+
+### Common Status Codes
+
+<ResponseField name="200" type="OK">
+  Request successful
+</ResponseField>
+
+<ResponseField name="201" type="Created">
+  Resource created successfully
+</ResponseField>
+
+<ResponseField name="204" type="No Content">
+  Request successful, no content returned
+</ResponseField>
+
+<ResponseField name="400" type="Bad Request">
+  Invalid request parameters
+</ResponseField>
+
+<ResponseField name="401" type="Unauthorized">
+  Missing or invalid authentication
+</ResponseField>
+
+<ResponseField name="403" type="Forbidden">
+  Insufficient permissions
+</ResponseField>
+
+<ResponseField name="404" type="Not Found">
+  Resource not found
+</ResponseField>
+
+<ResponseField name="409" type="Conflict">
+  Resource conflict (e.g., duplicate)
+</ResponseField>
+
+<ResponseField name="422" type="Unprocessable Entity">
+  Validation error
+</ResponseField>
+
+<ResponseField name="429" type="Too Many Requests">
+  Rate limit exceeded
+</ResponseField>
+
+<ResponseField name="500" type="Internal Server Error">
+  Server error
+</ResponseField>
+
+## Rate Limiting
+
+The Polar API implements rate limiting to ensure fair usage. Rate limit information is included in response headers:
+
+- `X-RateLimit-Limit` - Maximum requests allowed
+- `X-RateLimit-Remaining` - Requests remaining
+- `X-RateLimit-Reset` - Time when limit resets (Unix timestamp)
+
+When rate limited, you'll receive a `429` response. Implement exponential backoff in your applications.
+
+## Idempotency
+
+For safe retries of mutating requests (POST, PATCH, DELETE), use the `Idempotency-Key` header:
+
+```bash
+curl -X POST https://api.polar.sh/v1/products \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Idempotency-Key: unique-key-123" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Premium Plan"}'
+```
+
+Requests with the same idempotency key will return the same result.
+
+## Webhooks
+
+Polar can send webhook notifications for important events. See the [Webhooks documentation](/api-reference/webhooks) for setup and event types.
+
+## SDKs
+
+Official SDKs are available for popular languages:
+
+- **Python**: `pip install polar-sdk`
+- **TypeScript/JavaScript**: `npm install @polar-sh/sdk`
+- **Go**: `go get github.com/polarsource/polar-go`
+
+See the [SDK documentation](/integrate/sdk/typescript) for usage examples.
+
+## OpenAPI Specification
+
+The complete OpenAPI specification is available at:
+
+```
+https://api.polar.sh/v1/openapi.json
+```
+
+Use this to generate clients, explore the API, or import into tools like Postman.
+
+## Support
+
+For API support:
+
+- **Documentation**: [docs.polar.sh](https://docs.polar.sh)
+- **Community**: [Discord](https://discord.gg/polar)
+- **Email**: support@polar.sh

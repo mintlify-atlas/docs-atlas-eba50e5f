@@ -1,80 +1,506 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Get from account creation to your first checkout in under 5 minutes"
 ---
 
-## Get started in three steps
+## Get your first checkout running
 
-Get your documentation site running locally and make your first customization.
+This guide walks you through creating a Polar account, setting up your first product, and generating a checkout link. No code required to get started.
 
-### Step 1: Set up your local environment
+<Steps>
+  <Step title="Create your Polar account">
+    Head to [polar.sh](https://polar.sh) and sign up with your GitHub account.
+    
+    <Note>
+      Polar uses GitHub OAuth for authentication. This also enables automatic GitHub repository access benefits if you need them later.
+    </Note>
+    
+    After signing in, you'll create your first organization. This represents your business or project.
+  </Step>
+
+  <Step title="Create your first product">
+    Navigate to **Products** in the dashboard sidebar and click **Create Product**.
+    
+    <Tabs>
+      <Tab title="Subscription">
+        For recurring revenue (SaaS, memberships):
+        
+        1. **Name**: "Pro Plan" 
+        2. **Description**: Describe what customers get
+        3. **Type**: Select **Subscription**
+        4. **Price**: Set your monthly price (e.g., $29/month)
+        5. **Billing Interval**: Choose Monthly or Yearly
+        
+        <Tip>
+          You can add both monthly and yearly prices to the same product by creating multiple price points.
+        </Tip>
+      </Tab>
+      
+      <Tab title="One-Time">
+        For single purchases (ebooks, courses, tools):
+        
+        1. **Name**: "Starter Kit"
+        2. **Description**: What's included in the purchase
+        3. **Type**: Select **One-time**
+        4. **Price**: Set your price (e.g., $49)
+        
+        <Note>
+          One-time products don't require ongoing subscription management.
+        </Note>
+      </Tab>
+      
+      <Tab title="Pay-What-You-Want">
+        Let customers choose their price:
+        
+        1. **Name**: "Support the Project"
+        2. **Description**: Thank supporters
+        3. **Type**: Select **One-time**
+        4. **Price Type**: Choose **Pay what you want**
+        5. **Minimum**: Set minimum amount (e.g., $5)
+      </Tab>
+    </Tabs>
+    
+    Click **Create Product** to save.
+  </Step>
+
+  <Step title="Add benefits (optional)">
+    Benefits are what customers receive after purchasing. You can add them now or skip this step.
+    
+    <AccordionGroup>
+      <Accordion title="GitHub Repository Access">
+        Automatically invite customers to private repositories:
+        
+        1. Go to your product page
+        2. Click **Add Benefit** → **GitHub Repository Access**
+        3. Connect your GitHub account if not already connected
+        4. Select the repository
+        5. Choose permission level (Read, Write, or Admin)
+        
+        <Warning>
+          You must be an owner or admin of the repository to grant access.
+        </Warning>
+      </Accordion>
+      
+      <Accordion title="Discord Role">
+        Auto-assign Discord roles to customers:
+        
+        1. Click **Add Benefit** → **Discord**
+        2. Connect your Discord server
+        3. Select the role to assign
+        4. Customers will receive an invite link after purchase
+      </Accordion>
+      
+      <Accordion title="License Key">
+        Generate unique license keys:
+        
+        1. Click **Add Benefit** → **License Keys**
+        2. Configure key settings:
+           - Prefix for your keys
+           - Expiration (optional)
+           - Activation limit (optional)
+        3. Keys are generated automatically on purchase
+      </Accordion>
+      
+      <Accordion title="File Downloads">
+        Provide secure download links:
+        
+        1. Click **Add Benefit** → **File Downloads**
+        2. Upload your files (PDFs, ZIPs, etc.)
+        3. Files are available in the customer portal
+      </Accordion>
+    </AccordionGroup>
+    
+    [Learn more about Benefits →](/features/benefits)
+  </Step>
+
+  <Step title="Set up Stripe (for production)">
+    Polar uses Stripe to process payments. For testing, you can skip this step.
+    
+    <Tabs>
+      <Tab title="Test Mode">
+        By default, you're in **Sandbox mode**. All checkouts use Stripe test mode:
+        
+        - Use test card: `4242 4242 4242 4242`
+        - Any future expiry date
+        - Any CVC code
+        
+        Perfect for testing your integration before going live.
+        
+        [Learn more about Sandbox →](/integrate/sandbox)
+      </Tab>
+      
+      <Tab title="Production">
+        To accept real payments:
+        
+        1. Go to **Settings** → **Finance** → **Accounts**
+        2. Click **Connect Stripe**
+        3. Complete Stripe onboarding:
+           - Business information
+           - Banking details for payouts
+           - Tax information
+        4. Polar will verify your account (usually instant)
+        
+        <Warning>
+          Stripe onboarding is required to accept real payments. Polar cannot process payments without a connected Stripe account.
+        </Warning>
+        
+        [View supported countries →](/merchant-of-record/supported-countries)
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Create a checkout link">
+    Now create a shareable link customers can use to purchase:
+    
+    1. Navigate to **Checkout Links** in the sidebar
+    2. Click **Create Checkout Link**
+    3. Configure your checkout:
+       
+       <ParamField path="Product" type="required">
+         Select the product you created
+       </ParamField>
+       
+       <ParamField path="Success URL" type="optional">
+         Where to redirect customers after payment:
+         ```
+         https://yoursite.com/welcome?checkout_id={CHECKOUT_ID}
+         ```
+         The `{CHECKOUT_ID}` parameter is replaced automatically.
+       </ParamField>
+       
+       <ParamField path="Label" type="optional">
+         Internal label to organize your links (e.g., "Twitter Bio Link")
+       </ParamField>
+       
+       <ParamField path="Allow Discount Codes" type="boolean">
+         Let customers enter discount codes at checkout
+       </ParamField>
+    
+    4. Click **Create** to generate your link
+    
+    You'll get a URL like:
+    ```
+    https://polar.sh/your-org/checkout/link-123
+    ```
+    
+    Share this link anywhere - website, social media, emails, etc.
+  </Step>
+
+  <Step title="Test your checkout">
+    Open your checkout link in a new tab to test the flow:
+    
+    1. Click through the checkout process
+    2. In test mode, use: `4242 4242 4242 4242`
+    3. Complete the test purchase
+    4. Check **Orders** in your dashboard to see the test order
+    5. If you added benefits, verify they were granted in **Customers**
+    
+    <Tip>
+      The customer portal is available at `https://polar.sh/customer-portal`. Customers can manage subscriptions, download invoices, and access benefits.
+    </Tip>
+  </Step>
+</Steps>
+
+## What you've accomplished
 
 <AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
+  <Accordion title="Product created">
+    You now have a product that represents what you're selling. You can:
+    - Add more price tiers (monthly + yearly)
+    - Update description and images
+    - Attach multiple benefits
+    - Archive when no longer selling
   </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
+  
+  <Accordion title="Checkout flow ready">
+    Your checkout link handles:
+    - Secure payment collection
+    - Customer account creation
+    - Tax calculation (sales tax & VAT)
+    - Receipt generation
+    - Benefit fulfillment
   </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+  
+  <Accordion title="Test environment configured">
+    You can safely test:
+    - Different payment scenarios
+    - Subscription flows
+    - Benefit grants
+    - Webhook events
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
+    Switch to production when ready.
   </Accordion>
 </AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card
+    title="Integrate via API"
+    icon="code"
+    href="/integrate/authentication"
+  >
+    Create checkouts programmatically with our REST API
+  </Card>
+  
+  <Card
+    title="Set up webhooks"
+    icon="webhook"
+    href="/integrate/webhooks/endpoints"
+  >
+    React to checkout events in your application
+  </Card>
+  
+  <Card
+    title="Customize checkout"
+    icon="palette"
+    href="/features/checkout"
+  >
+    Brand your checkout with custom colors and logos
+  </Card>
+  
+  <Card
+    title="Add usage billing"
+    icon="chart-line"
+    href="/features/usage-based-billing/introduction"
+  >
+    Bill customers based on consumption metrics
+  </Card>
 </CardGroup>
 
+## Common customizations
+
+### Add a discount code
+
+1. Go to **Discounts** in the sidebar
+2. Click **Create Discount**
+3. Configure:
+   - **Code**: `LAUNCH20` (customer enters this)
+   - **Type**: Percentage or fixed amount
+   - **Value**: 20% or $10 off
+   - **Duration**: Forever, once, or repeating
+4. Customers can enter this code at checkout
+
+[Learn more about Discounts →](/features/discounts)
+
+### Offer a free trial
+
+1. Edit your subscription product
+2. Scroll to **Trial Period**
+3. Set trial duration (e.g., 14 days)
+4. Choose whether to require a payment method
+
+Customers get full access during the trial. Billing starts automatically after the trial ends.
+
+[Learn more about Trials →](/features/trials)
+
+### Embed checkout in your site
+
+Instead of redirecting to Polar's hosted checkout, embed it:
+
+<CodeGroup>
+```typescript Next.js
+import { Polar } from "@polar-sh/sdk";
+
+const polar = new Polar({
+  accessToken: process.env.POLAR_ACCESS_TOKEN,
+});
+
+// Create checkout session
+const checkout = await polar.checkouts.create({
+  productPriceId: "prp_...",
+  successUrl: "https://yoursite.com/success",
+});
+
+// Redirect to checkout.url
+return Response.redirect(checkout.url);
+```
+
+```html JavaScript
+<script src="https://cdn.polar.sh/checkout.js"></script>
+<script>
+  const checkout = new PolarCheckout({
+    checkoutId: "checkout_...",
+  });
+  
+  checkout.mount("#checkout-container");
+</script>
+```
+</CodeGroup>
+
+[View full embedding guide →](/guides/checkout-session)
+
+## API-first workflow
+
+Prefer to manage everything via API? Here's the complete flow:
+
+<Steps>
+  <Step title="Get an access token">
+    Create a Personal Access Token or Organization Access Token:
+    
+    1. Go to **Settings** → **Tokens**
+    2. Click **Create Token**
+    3. Select scopes: `products:write`, `checkouts:write`
+    4. Copy the token (shown once)
+    
+    [Learn more about Authentication →](/integrate/authentication)
+  </Step>
+  
+  <Step title="Create a product">
+    <CodeGroup>
+    ```typescript TypeScript
+    const product = await polar.products.create({
+      name: "Pro Plan",
+      description: "Full access to all features",
+      prices: [
+        {
+          amountType: "fixed",
+          priceAmount: 2900, // $29.00 in cents
+          priceCurrency: "USD",
+          recurringInterval: "month",
+        },
+      ],
+    });
+    ```
+    
+    ```python Python
+    product = polar.products.create(
+        name="Pro Plan",
+        description="Full access to all features",
+        prices=[
+            {
+                "amount_type": "fixed",
+                "price_amount": 2900,  # $29.00 in cents
+                "price_currency": "USD",
+                "recurring_interval": "month",
+            },
+        ],
+    )
+    ```
+    </CodeGroup>
+  </Step>
+  
+  <Step title="Create a checkout">
+    <CodeGroup>
+    ```typescript TypeScript
+    const checkout = await polar.checkouts.create({
+      productPriceId: product.prices[0].id,
+      successUrl: "https://yoursite.com/success",
+      customerEmail: "customer@example.com",
+    });
+    
+    // Redirect customer to checkout.url
+    ```
+    
+    ```python Python
+    checkout = polar.checkouts.create(
+        product_price_id=product.prices[0].id,
+        success_url="https://yoursite.com/success",
+        customer_email="customer@example.com",
+    )
+    
+    # Redirect customer to checkout.url
+    ```
+    </CodeGroup>
+  </Step>
+  
+  <Step title="Listen for webhooks">
+    Set up a webhook endpoint to receive events:
+    
+    ```typescript
+    // POST /webhooks/polar
+    export async function POST(req: Request) {
+      const event = await req.json();
+      
+      if (event.type === "checkout.completed") {
+        // Payment successful!
+        const customerId = event.data.customer_id;
+        const orderId = event.data.order_id;
+        
+        // Grant access in your system
+        await grantAccess(customerId);
+      }
+      
+      return new Response("OK", { status: 200 });
+    }
+    ```
+    
+    [View all webhook events →](/integrate/webhooks/events)
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Checkout link doesn't work">
+    **Issue**: Link shows "Product not found" or similar error
+    
+    **Solutions**:
+    - Verify the product is not archived
+    - Ensure you're not in Sandbox mode if using production link
+    - Check that the product has at least one active price
+  </Accordion>
+  
+  <Accordion title="Benefits not granted">
+    **Issue**: Customer completed checkout but didn't receive benefits
+    
+    **Solutions**:
+    - Check **Orders** → select the order → view **Benefits** tab
+    - Look for errors in the benefit grant status
+    - For GitHub: Ensure the repository is accessible
+    - For Discord: Verify bot has proper permissions
+    - Check webhook logs for `benefit.grant.created` events
+  </Accordion>
+  
+  <Accordion title="Stripe connection fails">
+    **Issue**: Can't complete Stripe onboarding
+    
+    **Solutions**:
+    - Verify your country is supported ([view list](/merchant-of-record/supported-countries))
+    - Ensure you have a valid business entity
+    - Check Stripe's [restricted businesses](https://stripe.com/legal/restricted-businesses)
+    - Contact [support](mailto:support@polar.sh) if issues persist
+  </Accordion>
+  
+  <Accordion title="Test payments failing">
+    **Issue**: Test checkouts show payment errors
+    
+    **Solutions**:
+    - Use Stripe test card: `4242 4242 4242 4242`
+    - Ensure you're in Sandbox mode (check dashboard banner)
+    - Try a different test card from [Stripe's test cards](https://stripe.com/docs/testing)
+    - Check browser console for errors
+  </Accordion>
+</AccordionGroup>
+
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  Need more help? Join our [Discord community](https://discord.gg/Pnhfz3UThd) or check [GitHub Discussions](https://github.com/polarsource/polar/discussions).
 </Note>
+
+## Related guides
+
+<CardGroup cols={3}>
+  <Card
+    title="Next.js Integration"
+    icon="react"
+    href="/guides/nextjs"
+  >
+    Full guide for Next.js apps
+  </Card>
+  
+  <Card
+    title="Laravel Integration"
+    icon="php"
+    href="/guides/laravel"
+  >
+    Complete Laravel setup
+  </Card>
+  
+  <Card
+    title="Webhooks Guide"
+    icon="webhook"
+    href="/integrate/webhooks/endpoints"
+  >
+    Handle checkout events
+  </Card>
+</CardGroup>

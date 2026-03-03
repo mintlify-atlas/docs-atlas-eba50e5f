@@ -1,0 +1,296 @@
+---
+title: Checkouts
+description: Create and manage checkout sessions
+---
+
+## Overview
+
+Checkouts represent payment sessions where customers complete purchases. They handle payment collection, tax calculation, and order creation.
+
+## The Checkout Object
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the checkout session
+</ResponseField>
+
+<ResponseField name="client_secret" type="string" required>
+  Secret used to access the checkout from client-side
+</ResponseField>
+
+<ResponseField name="status" type="enum" required>
+  Status: `open`, `confirmed`, `expired`, or `failed`
+</ResponseField>
+
+<ResponseField name="url" type="string" required>
+  URL to redirect customer to complete checkout
+</ResponseField>
+
+<ResponseField name="customer_id" type="string">
+  ID of the customer (if known)
+</ResponseField>
+
+<ResponseField name="customer_email" type="string">
+  Email address of the customer
+</ResponseField>
+
+<ResponseField name="product_id" type="string" required>
+  ID of the product being purchased
+</ResponseField>
+
+<ResponseField name="product_price_id" type="string" required>
+  ID of the selected price
+</ResponseField>
+
+<ResponseField name="amount" type="integer">
+  Total amount in cents (null for custom pricing until confirmed)
+</ResponseField>
+
+<ResponseField name="tax_amount" type="integer">
+  Tax amount in cents
+</ResponseField>
+
+<ResponseField name="currency" type="string" required>
+  Three-letter ISO currency code
+</ResponseField>
+
+<ResponseField name="discount_id" type="string">
+  Applied discount ID
+</ResponseField>
+
+<ResponseField name="subscription_id" type="string">
+  Created subscription ID (after confirmation)
+</ResponseField>
+
+<ResponseField name="order_id" type="string">
+  Created order ID (after confirmation)
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  Timestamp when checkout was created
+</ResponseField>
+
+<ResponseField name="expires_at" type="string" required>
+  Timestamp when checkout expires
+</ResponseField>
+
+---
+
+## List Checkouts
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/checkouts" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Query Parameters
+
+<ParamField query="page" type="integer" default="1">
+  Page number
+</ParamField>
+
+<ParamField query="limit" type="integer" default="20">
+  Items per page
+</ParamField>
+
+<ParamField query="organization_id" type="string">
+  Filter by organization ID
+</ParamField>
+
+<ParamField query="product_id" type="string">
+  Filter by product ID
+</ParamField>
+
+<ParamField query="customer_id" type="string">
+  Filter by customer ID
+</ParamField>
+
+<ParamField query="external_customer_id" type="string">
+  Filter by external customer ID
+</ParamField>
+
+<ParamField query="status" type="enum">
+  Filter by status: `open`, `confirmed`, `expired`, `failed`
+</ParamField>
+
+<ParamField query="query" type="string">
+  Filter by customer email
+</ParamField>
+
+---
+
+## Get Checkout
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/checkouts/{id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Checkout session ID
+</ParamField>
+
+---
+
+## Create Checkout
+
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/checkouts" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product_id": "prod_123",
+    "product_price_id": "price_456",
+    "customer_email": "customer@example.com",
+    "success_url": "https://example.com/success"
+  }'
+```
+
+### Request Body
+
+<ParamField body="product_id" type="string" required>
+  ID of the product to purchase
+</ParamField>
+
+<ParamField body="product_price_id" type="string" required>
+  ID of the price to use
+</ParamField>
+
+<ParamField body="customer_email" type="string">
+  Customer's email address
+</ParamField>
+
+<ParamField body="customer_id" type="string">
+  Existing customer ID
+</ParamField>
+
+<ParamField body="discount_id" type="string">
+  Discount code to apply
+</ParamField>
+
+<ParamField body="amount" type="integer">
+  Custom amount (for custom/PWYW pricing) in cents
+</ParamField>
+
+<ParamField body="success_url" type="string">
+  URL to redirect after successful payment
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Custom metadata
+</ParamField>
+
+### Response
+
+<ResponseField name="201" type="Created">
+  Returns the created checkout object with `url` to redirect customer
+</ResponseField>
+
+---
+
+## Update Checkout
+
+```bash cURL
+curl -X PATCH "https://api.polar.sh/v1/checkouts/{id}" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_email": "updated@example.com"
+  }'
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Checkout session ID
+</ParamField>
+
+### Request Body
+
+<ParamField body="customer_email" type="string">
+  Update customer email
+</ParamField>
+
+<ParamField body="customer_billing_address" type="object">
+  Update billing address
+</ParamField>
+
+<ParamField body="amount" type="integer">
+  Update amount (for custom pricing)
+</ParamField>
+
+---
+
+## Client Endpoints
+
+These endpoints use the client secret instead of API authentication.
+
+### Get Checkout from Client
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/checkouts/client/{client_secret}"
+```
+
+### Update from Client
+
+```bash cURL
+curl -X PATCH "https://api.polar.sh/v1/checkouts/client/{client_secret}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_email": "customer@example.com"
+  }'
+```
+
+### Confirm Checkout
+
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/checkouts/client/{client_secret}/confirm" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "confirmation_token_id": "tok_123"
+  }'
+```
+
+<ParamField body="confirmation_token_id" type="string" required>
+  Payment token from Stripe or payment provider
+</ParamField>
+
+### Response
+
+Returns the confirmed checkout with `subscription_id` and/or `order_id`.
+
+---
+
+## Examples
+
+### Create Checkout for Subscription
+
+```bash
+curl -X POST "https://api.polar.sh/v1/checkouts" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product_id": "prod_monthly_sub",
+    "product_price_id": "price_2999",
+    "customer_email": "john@example.com",
+    "success_url": "https://myapp.com/success",
+    "metadata": {
+      "user_id": "12345"
+    }
+  }'
+```
+
+### Apply Discount Code
+
+```bash
+curl -X POST "https://api.polar.sh/v1/checkouts" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product_id": "prod_123",
+    "product_price_id": "price_456",
+    "customer_email": "customer@example.com",
+    "discount_id": "discount_SAVE20"
+  }'
+```

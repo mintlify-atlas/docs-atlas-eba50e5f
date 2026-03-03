@@ -1,0 +1,422 @@
+---
+title: Payout Processing
+description: Process withdrawals from your Polar balance to your bank account
+---
+
+## Overview
+
+Payouts transfer your available balance from Polar to your connected bank account. Understanding the payout process helps ensure timely access to your funds.
+
+## Payout Process
+
+### Two-Step Process
+
+Polar uses a two-step payout process with Stripe:
+
+#### Step 1: Transfer to Stripe Connect Account
+
+1. Payout created in Polar
+2. Funds transferred to your Stripe Connect account
+3. Platform fees deducted
+4. Payout transaction recorded
+
+#### Step 2: Bank Transfer
+
+1. Funds available in Stripe balance
+2. Stripe payout triggered to your bank
+3. Bank processes deposit
+4. Payout marked as succeeded
+
+<Note>
+The two-step process ensures proper accounting and enables multi-currency support.
+</Note>
+
+## Creating a Payout
+
+### Prerequisites
+
+- [Active account](/features/finance/accounts) with payouts enabled
+- Balance above [minimum threshold](/features/finance/balance)
+- No pending payout in progress
+- Account not [under review](/merchant-of-record/account-reviews)
+
+### Payout Estimation
+
+Before creating a payout, estimate the net amount:
+
+```javascript
+const estimate = await polar.payouts.estimate({
+  account_id: accountId
+});
+
+console.log(`Gross: $${estimate.gross_amount / 100}`);
+console.log(`Fees: $${estimate.fees_amount / 100}`);
+console.log(`Net: $${estimate.net_amount / 100}`);
+```
+
+### Initiating a Payout
+
+1. Navigate to Finance → Payouts
+2. Click "Create Payout"
+3. Review payout estimate
+4. Confirm payout creation
+5. Payout begins processing
+
+### Automatic Payout Creation
+
+Payouts are created automatically when:
+
+- Balance reaches minimum threshold
+- Safety delay period has passed
+- No pending payout exists
+
+## Payout Status Flow
+
+### Status Progression
+
+```
+Pending → In Transit → Succeeded
+         ↓
+       Failed → Retry
+         ↓
+      Canceled
+```
+
+### Pending
+
+- Payout created successfully
+- Funds reserved from balance
+- Transfer to Stripe initiated
+- Waiting for Stripe confirmation
+
+### In Transit
+
+- Transfer to Stripe completed
+- Bank transfer initiated
+- Funds en route to bank account
+- Typically takes 2-7 business days
+
+### Succeeded
+
+- Funds arrived in bank account
+- Payout completed successfully
+- Invoice available for download
+- Transaction history updated
+
+### Failed
+
+- Bank transfer unsuccessful
+- Common reasons:
+  - Invalid bank account details
+  - Bank rejected transfer
+  - Account closed
+  - Currency restrictions
+
+### Canceled
+
+- Payout manually canceled
+- Funds returned to balance
+- Reversal transaction created
+- Can create new payout
+
+## Payout Attempts
+
+Each payout may have multiple attempts:
+
+### Initial Attempt
+
+- First try to transfer funds
+- Uses full payout amount
+- Creates attempt record
+
+### Retry Attempts
+
+- Triggered if initial attempt fails
+- May use adjusted amount
+- Stripe has hidden payout rules
+- Automatic retries for transient failures
+
+### Attempt Details
+
+- Attempt ID
+- Status (pending, succeeded, failed)
+- Amount attempted
+- Currency
+- Failure reason (if failed)
+- Timestamp
+
+## Fee Calculation
+
+### Platform Fees
+
+Polar charges [4% + 40¢](/merchant-of-record/fees) on gross revenue:
+
+```
+Platform Fee = (Gross Amount × 0.04) + $0.40
+```
+
+### Fee Deduction Timing
+
+Fees are deducted when:
+
+1. Payout created
+2. Fee transactions generated
+3. Credits applied first
+4. Remaining fees deducted from balance
+
+### Fee Credits
+
+If you have [fee credits](/features/finance/balance#credit-balance):
+
+- Credits applied automatically
+- Reduces platform fees
+- No action required
+- Credit usage shown in transactions
+
+## Currency Conversion
+
+### Multi-Currency Payouts
+
+If revenue currency differs from payout currency:
+
+1. Conversion rate determined by Stripe
+2. Rate applied during transfer
+3. Actual amount may vary slightly
+4. Conversion fees may apply
+
+### Zero-Decimal Currencies
+
+Special handling for ISK, HUF, TWD, UGX:
+
+- Payout amounts rounded down
+- Must be whole units (no cents)
+- Remainder stays in balance
+- Logged for transparency
+
+## Payout Invoices
+
+### Generating Invoices
+
+Create a reverse invoice for platform fees:
+
+1. Navigate to payout details
+2. Click "Generate Invoice"
+3. Optionally set custom invoice number
+4. Invoice generated and stored
+
+### Invoice Requirements
+
+- Payout must have succeeded
+- [Billing details](/features/finance/accounts#billing-information) configured
+- Invoice number unique per account
+
+### Invoice Contents
+
+- Invoice number (e.g., `POLAR-0001`)
+- Billing entity details
+- Fee breakdown
+- Payment information
+- Transaction summary
+
+### Downloading Invoices
+
+```javascript
+const invoice = await polar.payouts.getInvoice(payoutId);
+console.log(`Invoice URL: ${invoice.url}`);
+```
+
+## Transaction Export
+
+### CSV Export
+
+Export detailed payout transactions:
+
+- All transactions included in payout
+- Fee breakdown
+- Order and subscription details
+- Compatible with spreadsheet software
+
+### CSV Columns
+
+- Date
+- Payout ID
+- Transaction ID
+- Description
+- Currency
+- Amount
+- Payout Total
+- Account Currency
+- Account Payout Total
+
+## Canceling Payouts
+
+### When You Can Cancel
+
+- Status is Pending
+- Transfer not yet completed
+- Within cancellation window
+
+### Cancellation Process
+
+1. Navigate to payout details
+2. Click "Cancel Payout"
+3. Confirm cancellation
+4. Reversal transaction created
+5. Funds returned to balance
+
+### Stripe Transfer Reversal
+
+If funds already transferred to Stripe:
+
+- Reversal initiated automatically
+- Transfer reversed on Stripe
+- Funds returned to Polar
+- May take 1-3 business days
+
+<Warning>
+You cannot cancel a payout once the bank transfer has been initiated by Stripe.
+</Warning>
+
+## Payout Timing
+
+### Processing Time
+
+- **Transfer to Stripe**: Immediate
+- **Stripe Processing**: 1-2 business days
+- **Bank Transfer**: 2-7 business days
+- **Total**: 3-9 business days typically
+
+### Factors Affecting Timing
+
+- Bank processing schedules
+- Weekends and holidays
+- Currency conversion
+- First-time payout verification
+- International transfers
+
+### Arrival Date
+
+Stripe provides estimated arrival date:
+
+- Shown in payout details
+- Updated if status changes
+- Actual timing may vary
+- Bank may delay slightly
+
+## Common Issues
+
+### Insufficient Balance Error
+
+Causes:
+
+- Balance below minimum
+- Recent refunds processed
+- Payout fees exceed balance
+
+Solution: Wait for more revenue or process smaller payout.
+
+### Account Under Review
+
+Causes:
+
+- [Automated account review](/merchant-of-record/account-reviews) triggered
+- Unusual activity detected
+- Compliance requirements
+
+Solution: Complete review process, provide requested information.
+
+### Payouts Not Enabled
+
+Causes:
+
+- Onboarding incomplete
+- Bank details not verified
+- Identity verification pending
+
+Solution: Complete [account setup](/features/finance/accounts).
+
+### Payout Amount Too Large
+
+Causes:
+
+- Stripe limits for currency
+- First payout restrictions
+- Account limitations
+
+Solution: Process multiple smaller payouts or contact support.
+
+## Best Practices
+
+### Regular Payouts
+
+- Process payouts consistently
+- Don't let balance accumulate excessively
+- Monitor for failed attempts
+- Keep bank details current
+
+### Invoice Management
+
+- Generate invoices promptly
+- Use sequential invoice numbers
+- Store invoices securely
+- Track for accounting
+
+### Balance Planning
+
+- Maintain refund reserves
+- Account for seasonal variations
+- Plan for fee deductions
+- Monitor minimum thresholds
+
+## API Integration
+
+### List Payouts
+
+```javascript
+const payouts = await polar.payouts.list({
+  account_id: accountId,
+  status: ["succeeded", "pending"],
+  page: 1,
+  limit: 10
+});
+```
+
+### Get Payout Details
+
+```javascript
+const payout = await polar.payouts.get(payoutId);
+console.log(`Status: ${payout.status}`);
+console.log(`Amount: $${payout.amount / 100}`);
+```
+
+### Create Payout
+
+```javascript
+const payout = await polar.payouts.create({
+  account_id: accountId
+});
+```
+
+## Monitoring and Alerts
+
+### Webhook Events
+
+Subscribe to payout events:
+
+- `payout.created`
+- `payout.invoice_generated`
+- Stripe payout status changes
+
+### Status Monitoring
+
+- Check payout status regularly
+- Set up alerting for failures
+- Monitor arrival dates
+- Track processing time
+
+## Next Steps
+
+- Set up your [Financial Account](/features/finance/accounts)
+- Monitor your [Balance](/features/finance/balance)
+- Review [Fee Structure](/merchant-of-record/fees)
+- Understand [Account Reviews](/merchant-of-record/account-reviews)

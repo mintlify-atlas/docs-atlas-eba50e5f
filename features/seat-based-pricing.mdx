@@ -1,0 +1,347 @@
+---
+title: Seat-Based Pricing
+description: Implement per-seat subscription pricing with flexible seat management and assignment
+---
+
+Seat-based pricing allows you to charge customers based on the number of users (seats) they need. This is ideal for B2B SaaS products, team collaboration tools, and multi-user applications.
+
+## Overview
+
+Seat-based subscriptions enable:
+- Per-seat pricing with automatic proration
+- Seat assignment and invitation management
+- Flexible minimum and maximum seat limits
+- Self-service seat management for customers
+
+<Note>
+Seat-based pricing is only available for recurring (subscription) products.
+</Note>
+
+## Creating Seat-Based Prices
+
+Configure seat-based pricing when creating a product price:
+
+```json Seat-Based Price
+{
+  "type": "recurring",
+  "pricing_type": "seat",
+  "recurring_interval": "month",
+  "amount": 1000,  // $10 per seat per month
+  "currency": "usd",
+  "minimum_seats": 3,
+  "maximum_seats": 50
+}
+```
+
+### Seat Configuration
+
+- **amount**: Price per seat per billing period
+- **minimum_seats**: Minimum number of seats required (default: 1)
+- **maximum_seats**: Optional maximum seat limit
+- **pricing_type**: Must be `"seat"`
+
+<Warning>
+The minimum_seats must be at least 1. Setting it higher (e.g., 3) requires customers to purchase at least that many seats.
+</Warning>
+
+## How Seat Billing Works
+
+### Initial Purchase
+
+When a customer subscribes:
+
+```typescript
+const checkout = await polar.checkouts.create({
+  productPriceId: 'price_seat_xxx',
+  seats: 5  // Customer selects 5 seats
+});
+```
+
+Total charge: `$10/seat × 5 seats = $50/month`
+
+### Seat Changes
+
+Customers can add or remove seats at any time:
+
+```typescript
+// Increase from 5 to 8 seats
+await polar.subscriptions.update({
+  id: 'sub_xxx',
+  seats: 8
+});
+```
+
+<Note>
+Seat changes are prorated automatically. Customers are charged immediately for added seats and credited for removed seats at the next renewal.
+</Note>
+
+## Seat Assignment
+
+Seat-based subscriptions support assigning seats to specific users:
+
+<Steps>
+  <Step title="Assign Seat">
+    The subscription owner assigns a seat to a team member:
+    
+    ```typescript
+    await polar.customerSeats.assign({
+      subscriptionId: 'sub_xxx',
+      email: 'member@example.com'
+    });
+    ```
+  </Step>
+  
+  <Step title="Invitation Sent">
+    An invitation email is sent to the assigned member with a claim link.
+  </Step>
+  
+  <Step title="Member Claims Seat">
+    The member clicks the link and claims their seat, gaining access to benefits.
+  </Step>
+</Steps>
+
+### Seat Status
+
+Seats have three statuses:
+
+- `pending`: Assigned but not yet claimed by the member
+- `claimed`: Member has accepted and is actively using the seat
+- `revoked`: Seat access has been removed
+
+```json Seat Object
+{
+  "id": "seat_xxx",
+  "status": "claimed",
+  "subscription_id": "sub_xxx",
+  "member_id": "member_xxx",
+  "email": "member@example.com",
+  "claimed_at": "2024-01-15T10:30:00Z"
+}
+```
+
+## Seat Management Rules
+
+### Increasing Seats
+
+✅ **Allowed at any time**:
+- Must not exceed `maximum_seats` (if set)
+- Proration charge applied immediately
+- New seats become available instantly
+
+```typescript
+// From 5 to 10 seats
+await polar.subscriptions.update({
+  id: 'sub_xxx',
+  seats: 10
+});
+```
+
+### Decreasing Seats
+
+❌ **Restrictions**:
+- Cannot decrease below `minimum_seats`
+- Cannot decrease below currently assigned seats
+- Must revoke seats before decreasing
+
+```json Error: Seats Already Assigned
+{
+  "error": "SeatsAlreadyAssigned",
+  "message": "Cannot decrease seats to 3. Currently 5 seats are assigned. Revoke seats first.",
+  "assigned_count": 5,
+  "requested_seats": 3
+}
+```
+
+<Steps>
+  <Step title="Revoke Seats">
+    First, revoke assigned seats:
+    ```typescript
+    await polar.customerSeats.revoke({
+      id: 'seat_xxx'
+    });
+    ```
+  </Step>
+  
+  <Step title="Decrease Total">
+    Then decrease the subscription seats:
+    ```typescript
+    await polar.subscriptions.update({
+      id: 'sub_xxx',
+      seats: 3
+    });
+    ```
+  </Step>
+</Steps>
+
+## Proration
+
+Seat changes are automatically prorated:
+
+### Adding Seats Mid-Cycle
+
+When adding seats during an active billing period:
+
+1. **Immediate Charge**: Customer is charged for the prorated amount
+2. **Proration Period**: From now until the end of the current billing period
+3. **Next Invoice**: Full amount for new seat count
+
+```typescript
+// Add 3 seats halfway through a monthly cycle
+// Immediate charge: ($10/seat × 3 seats × 15 days / 30 days) = $15
+// Next invoice: $10/seat × 8 total seats = $80
+```
+
+### Removing Seats Mid-Cycle
+
+When removing seats:
+
+1. **Credit Applied**: Prorated amount credited to customer balance
+2. **Applied at Renewal**: Credit reduces the next invoice
+3. **No Immediate Refund**: Credit is not immediately refunded
+
+<Note>
+Proration behavior can be controlled with the `proration_behavior` parameter in subscription updates.
+</Note>
+
+## Seat Assignment Methods
+
+### By Email
+
+```typescript
+await polar.customerSeats.assign({
+  subscriptionId: 'sub_xxx',
+  email: 'member@example.com'
+});
+```
+
+### By Customer ID
+
+```typescript
+await polar.customerSeats.assign({
+  subscriptionId: 'sub_xxx',
+  customerId: 'customer_xxx'
+});
+```
+
+### By External ID
+
+```typescript
+await polar.customerSeats.assign({
+  subscriptionId: 'sub_xxx',
+  externalCustomerId: 'user_123_in_my_system'
+});
+```
+
+## Invitation Emails
+
+When a seat is assigned, Polar sends an invitation email:
+
+- **Subject**: You've been invited to [Product Name]
+- **Content**: Personalized invitation with claim link
+- **Expiration**: Links expire after 7 days
+- **Token**: Secure single-use claim token
+
+<Note>
+Customize invitation email templates in your organization settings.
+</Note>
+
+## Customer Portal Integration
+
+The customer portal provides self-service seat management:
+
+- **View Seats**: See all assigned and available seats
+- **Assign Seats**: Invite new team members
+- **Revoke Seats**: Remove access from members
+- **Change Quantity**: Add or remove total seats
+
+```typescript Customer Portal URL
+const portalUrl = await polar.customerPortal.getUrl({
+  customerId: 'customer_xxx',
+  view: 'subscriptions'
+});
+```
+
+## Webhooks
+
+Seat-related webhook events:
+
+- `customer_seat.assigned`: Seat assigned to a member
+- `customer_seat.claimed`: Member claimed their seat
+- `customer_seat.revoked`: Seat access revoked
+- `subscription.seats_updated`: Total seat count changed
+
+```json customer_seat.claimed Event
+{
+  "type": "customer_seat.claimed",
+  "data": {
+    "id": "seat_xxx",
+    "status": "claimed",
+    "subscription_id": "sub_xxx",
+    "member_id": "member_xxx",
+    "email": "member@example.com",
+    "claimed_at": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+## Seat Validation
+
+Polar enforces seat limits:
+
+```json Error: Below Minimum
+{
+  "error": "BelowMinimumSeats",
+  "message": "Minimum 3 seats required.",
+  "minimum_seats": 3,
+  "requested_seats": 2
+}
+```
+
+```json Error: Above Maximum  
+{
+  "error": "AboveMaximumSeats",
+  "message": "Maximum 50 seats allowed.",
+  "maximum_seats": 50,
+  "requested_seats": 60
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Set Reasonable Minimums" icon="chart-line">
+    Balance revenue goals with customer acquisition (e.g., 3-5 seat minimum)
+  </Card>
+  
+  <Card title="Communicate Limits" icon="message">
+    Clearly show seat limits and pricing in your checkout flow
+  </Card>
+  
+  <Card title="Enable Self-Service" icon="users">
+    Let customers manage seats in the customer portal
+  </Card>
+  
+  <Card title="Track Utilization" icon="gauge">
+    Monitor seat utilization to identify expansion opportunities
+  </Card>
+</CardGroup>
+
+## Seat-Based vs Fixed Pricing
+
+| Feature | Seat-Based | Fixed |
+|---------|------------|-------|
+| Pricing | Per seat | Flat rate |
+| Scalability | Linear growth | One price |
+| Seat Assignment | Required | N/A |
+| Proration | Automatic | N/A |
+| Best For | Team/B2B products | Individual plans |
+
+## API Reference
+
+See the full API documentation:
+
+- [Create Product Price](/api-reference/products/create) - Configure seat pricing
+- [Update Subscription](/api-reference/subscriptions/update) - Change seat count
+- [Assign Seat](/api-reference/customer-seats/assign)
+- [Revoke Seat](/api-reference/customer-seats/revoke)
+- [List Seats](/api-reference/customer-seats/list)

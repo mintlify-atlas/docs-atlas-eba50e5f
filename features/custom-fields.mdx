@@ -1,0 +1,346 @@
+---
+title: Custom Checkout Fields
+description: Collect additional information from customers during checkout with custom fields
+---
+
+Custom fields allow you to collect additional information from customers during the checkout process. This data can be used for personalization, compliance, shipping, or any other business needs.
+
+## Overview
+
+Custom fields enable you to:
+- Collect specific data during checkout
+- Store data with orders and customers
+- Use data in webhooks and integrations
+- Support various field types
+
+<Note>
+Custom fields are defined at the organization level and can be attached to specific products.
+</Note>
+
+## Field Types
+
+Polar supports multiple custom field types:
+
+<CardGroup cols={2}>
+  <Card title="Text" icon="font">
+    Single-line text input for short answers
+  </Card>
+  
+  <Card title="Textarea" icon="align-left">
+    Multi-line text input for longer content
+  </Card>
+  
+  <Card title="Number" icon="hashtag">
+    Numeric input with validation
+  </Card>
+  
+  <Card title="Date" icon="calendar">
+    Date picker for date selection
+  </Card>
+  
+  <Card title="Checkbox" icon="square-check">
+    Boolean yes/no field
+  </Card>
+  
+  <Card title="Select" icon="list">
+    Dropdown with predefined options
+  </Card>
+</CardGroup>
+
+## Creating Custom Fields
+
+<Steps>
+  <Step title="Navigate to Custom Fields">
+    Go to **Settings** > **Custom Fields** in your organization dashboard.
+  </Step>
+  
+  <Step title="Create Field">
+    Click **New Custom Field** and configure:
+    
+    ```json Example: Company Name Field
+    {
+      "name": "Company Name",
+      "slug": "company_name",
+      "type": "text",
+      "required": true,
+      "properties": {}
+    }
+    ```
+  </Step>
+  
+  <Step title="Attach to Products">
+    Select which products should display this field during checkout.
+  </Step>
+</Steps>
+
+## Field Configuration
+
+### Basic Properties
+
+- **name**: Display name shown to customers
+- **slug**: Unique identifier (alphanumeric with underscores)
+- **type**: Field type (text, number, select, etc.)
+- **required**: Whether the field must be filled
+
+```json Custom Field Structure
+{
+  "name": "T-Shirt Size",
+  "slug": "tshirt_size",
+  "type": "select",
+  "required": true,
+  "properties": {
+    "options": [
+      {"value": "s", "label": "Small"},
+      {"value": "m", "label": "Medium"},
+      {"value": "l", "label": "Large"},
+      {"value": "xl", "label": "Extra Large"}
+    ]
+  }
+}
+```
+
+### Type-Specific Properties
+
+#### Text Fields
+
+```json
+{
+  "type": "text",
+  "properties": {
+    "min_length": 3,
+    "max_length": 100,
+    "placeholder": "Enter your company name"
+  }
+}
+```
+
+#### Number Fields
+
+```json
+{
+  "type": "number",
+  "properties": {
+    "min": 1,
+    "max": 999,
+    "placeholder": "Quantity"
+  }
+}
+```
+
+#### Select Fields
+
+```json
+{
+  "type": "select",
+  "properties": {
+    "options": [
+      {"value": "option1", "label": "Option 1"},
+      {"value": "option2", "label": "Option 2"}
+    ]
+  }
+}
+```
+
+## Field Slugs
+
+Slugs are unique identifiers used to reference field data:
+
+- Must be unique within your organization
+- Can only contain lowercase letters, numbers, and underscores
+- Used in API responses and webhooks
+- Cannot be changed after field creation
+
+<Warning>
+Choose slugs carefully - they cannot be changed once created. Use descriptive, stable identifiers like `company_name` not `field1`.
+</Warning>
+
+## Attaching to Products
+
+Custom fields can be attached to specific products:
+
+```typescript
+await polar.products.update({
+  id: 'product_xxx',
+  customFields: [
+    'custom_field_xxx',  // Custom field ID
+    'custom_field_yyy'
+  ]
+});
+```
+
+<Note>
+When a customer checks out a product with attached custom fields, they'll be prompted to fill them in.
+</Note>
+
+## Accessing Custom Field Data
+
+### In Orders
+
+Custom field data is stored with orders:
+
+```json Order with Custom Fields
+{
+  "id": "order_xxx",
+  "amount": 10000,
+  "custom_field_data": {
+    "company_name": "Acme Corp",
+    "tshirt_size": "l",
+    "employee_count": "50"
+  }
+}
+```
+
+### In Customers
+
+Data is also attached to customer records:
+
+```json Customer with Custom Fields
+{
+  "id": "customer_xxx",
+  "email": "user@example.com",
+  "custom_field_data": {
+    "company_name": "Acme Corp",
+    "industry": "technology"
+  }
+}
+```
+
+### Via API
+
+Retrieve custom field data via the API:
+
+```typescript
+const order = await polar.orders.get('order_xxx');
+console.log(order.customFieldData['company_name']);
+```
+
+## Updating Custom Fields
+
+You can update most field properties:
+
+✅ **Can Update**:
+- Name
+- Required status  
+- Properties (options, min/max, etc.)
+- Product attachments
+
+❌ **Cannot Update**:
+- Type (text → number)
+- Slug
+
+<Warning>
+Changing the field type would break existing data. Create a new field instead.
+</Warning>
+
+## Validation
+
+Polar validates custom field input:
+
+- **Required fields**: Must have a value
+- **Type validation**: Values must match the field type
+- **Property constraints**: Min/max length, number ranges, etc.
+- **Select options**: Value must be one of the defined options
+
+```json Validation Error
+{
+  "type": "value_error",
+  "loc": ["body", "custom_field_data", "company_name"],
+  "msg": "Company name is required",
+  "input": null
+}
+```
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="B2B Information" icon="building">
+    Collect company name, size, and industry for B2B customers
+  </Card>
+  
+  <Card title="Shipping Details" icon="truck">
+    Gather delivery preferences and special instructions
+  </Card>
+  
+  <Card title="Personalization" icon="user">
+    Collect preferences for product customization
+  </Card>
+  
+  <Card title="Compliance" icon="shield-check">
+    Gather required information for regulatory compliance
+  </Card>
+</CardGroup>
+
+## Webhooks
+
+Custom field data is included in webhook payloads:
+
+```json order.created Webhook
+{
+  "type": "order.created",
+  "data": {
+    "id": "order_xxx",
+    "custom_field_data": {
+      "company_name": "Acme Corp",
+      "department": "Engineering"
+    }
+  }
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Minimize Required Fields" icon="minimize">
+    Only require fields that are absolutely necessary to reduce checkout friction
+  </Card>
+  
+  <Card title="Use Clear Labels" icon="tag">
+    Make field names clear and specific to help customers understand what to enter
+  </Card>
+  
+  <Card title="Provide Examples" icon="info">
+    Use placeholder text to show expected format
+  </Card>
+  
+  <Card title="Validate Early" icon="check">
+    Use proper field types and constraints to prevent invalid data
+  </Card>
+</CardGroup>
+
+## Field Data Storage
+
+Custom field data is stored as JSONB:
+
+- **Efficient**: Stored in a structured, queryable format
+- **Flexible**: No schema changes needed for new fields
+- **Indexed**: Fast lookups by field slug
+
+```sql Example Query
+SELECT *
+FROM orders
+WHERE custom_field_data->>'company_name' = 'Acme Corp';
+```
+
+## Deleting Custom Fields
+
+When you delete a custom field:
+
+1. **Field marked deleted**: Soft-deleted, not permanently removed
+2. **Detached from products**: No longer shown in checkout
+3. **Data preserved**: Existing field data in orders/customers remains
+4. **API access**: Can still retrieve old data via API
+
+<Warning>
+Deleting a custom field removes it from future checkouts but does not delete historical data.
+</Warning>
+
+## API Reference
+
+Manage custom fields programmatically via the Polar API:
+
+- `POST /v1/custom-fields` - Create custom field
+- `PATCH /v1/custom-fields/{id}` - Update custom field
+- `GET /v1/custom-fields` - List custom fields
+- `DELETE /v1/custom-fields/{id}` - Delete custom field
+
+See the [API Reference](/api-reference/introduction) for complete endpoint documentation.

@@ -1,0 +1,354 @@
+---
+title: Customers
+description: Manage your customers
+---
+
+## Overview
+
+Customers represent individuals or organizations that purchase your products. They can have subscriptions, orders, and benefits.
+
+## The Customer Object
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the customer
+</ResponseField>
+
+<ResponseField name="email" type="string" required>
+  Customer's email address
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Customer's name
+</ResponseField>
+
+<ResponseField name="external_id" type="string">
+  Your internal ID for this customer
+</ResponseField>
+
+<ResponseField name="billing_address" type="object">
+  Billing address
+  <Expandable>
+    <ResponseField name="line1" type="string">
+      Address line 1
+    </ResponseField>
+    <ResponseField name="line2" type="string">
+      Address line 2
+    </ResponseField>
+    <ResponseField name="city" type="string">
+      City
+    </ResponseField>
+    <ResponseField name="state" type="string">
+      State/province
+    </ResponseField>
+    <ResponseField name="postal_code" type="string">
+      Postal/ZIP code
+    </ResponseField>
+    <ResponseField name="country" type="string">
+      Two-letter country code
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="tax_id" type="string">
+  Tax ID (VAT number, etc.)
+</ResponseField>
+
+<ResponseField name="organization_id" type="string" required>
+  Organization owning this customer
+</ResponseField>
+
+<ResponseField name="metadata" type="object">
+  Custom metadata
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  Creation timestamp
+</ResponseField>
+
+---
+
+## List Customers
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/customers" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Query Parameters
+
+<ParamField query="organization_id" type="string">
+  Filter by organization
+</ParamField>
+
+<ParamField query="email" type="string">
+  Filter by exact email
+</ParamField>
+
+<ParamField query="query" type="string">
+  Search by name, email, or external ID
+</ParamField>
+
+<ParamField query="metadata" type="object">
+  Filter by metadata
+</ParamField>
+
+---
+
+## Get Customer
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/customers/{id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Customer ID
+</ParamField>
+
+---
+
+## Get Customer by External ID
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/customers/external/{external_id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Path Parameters
+
+<ParamField path="external_id" type="string" required>
+  Your external customer ID
+</ParamField>
+
+---
+
+## Create Customer
+
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/customers" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "customer@example.com",
+    "name": "John Doe",
+    "external_id": "user_12345",
+    "organization_id": "org_123"
+  }'
+```
+
+### Request Body
+
+<ParamField body="email" type="string" required>
+  Customer's email address
+</ParamField>
+
+<ParamField body="name" type="string">
+  Customer's name
+</ParamField>
+
+<ParamField body="external_id" type="string">
+  Your internal customer ID
+</ParamField>
+
+<ParamField body="billing_address" type="object">
+  Billing address
+</ParamField>
+
+<ParamField body="tax_id" type="string">
+  Tax ID
+</ParamField>
+
+<ParamField body="organization_id" type="string">
+  Organization ID (required unless using org token)
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Custom metadata
+</ParamField>
+
+---
+
+## Update Customer
+
+```bash cURL
+curl -X PATCH "https://api.polar.sh/v1/customers/{id}" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Jane Doe",
+    "metadata": {
+      "tier": "premium"
+    }
+  }'
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Customer ID
+</ParamField>
+
+### Request Body
+
+All fields optional.
+
+<ParamField body="email" type="string">
+  Update email
+</ParamField>
+
+<ParamField body="name" type="string">
+  Update name
+</ParamField>
+
+<ParamField body="billing_address" type="object">
+  Update billing address
+</ParamField>
+
+<ParamField body="tax_id" type="string">
+  Update tax ID
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Update metadata
+</ParamField>
+
+---
+
+## Update by External ID
+
+```bash cURL
+curl -X PATCH "https://api.polar.sh/v1/customers/external/{external_id}" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Jane Doe"}'
+```
+
+---
+
+## Delete Customer
+
+```bash cURL
+curl -X DELETE "https://api.polar.sh/v1/customers/{id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+<Warning>
+  This immediately cancels all active subscriptions and revokes all benefits. Customer information is retained for historical orders.
+</Warning>
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Customer ID
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="anonymize" type="boolean" default="false">
+  Also anonymize personal data for GDPR compliance
+</ParamField>
+
+### Response
+
+<ResponseField name="204" type="No Content">
+  Customer deleted
+</ResponseField>
+
+---
+
+## Get Customer State
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/customers/{id}/state" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+Get a comprehensive overview of the customer's subscriptions and benefits.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Customer ID
+</ParamField>
+
+### Response
+
+<ResponseField name="customer" type="object">
+  Customer object
+</ResponseField>
+
+<ResponseField name="subscriptions" type="array">
+  Active subscriptions
+</ResponseField>
+
+<ResponseField name="benefits" type="array">
+  Active benefits
+</ResponseField>
+
+---
+
+## Export Customers
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/customers/export" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Response
+
+Returns a CSV file with customer data.
+
+---
+
+## Examples
+
+### Create Customer with External ID
+
+```bash
+curl -X POST "https://api.polar.sh/v1/customers" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "john@example.com",
+    "name": "John Doe",
+    "external_id": "user_abc123",
+    "organization_id": "org_xyz",
+    "metadata": {
+      "signup_source": "website",
+      "plan": "trial"
+    }
+  }'
+```
+
+### Update Customer Billing Address
+
+```bash
+curl -X PATCH "https://api.polar.sh/v1/customers/cust_123" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "billing_address": {
+      "line1": "123 Main St",
+      "city": "San Francisco",
+      "state": "CA",
+      "postal_code": "94102",
+      "country": "US"
+    }
+  }'
+```
+
+### Get Customer by Your ID
+
+```bash
+curl -X GET "https://api.polar.sh/v1/customers/external/user_abc123" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Delete and Anonymize
+
+```bash
+curl -X DELETE "https://api.polar.sh/v1/customers/cust_123?anonymize=true" \
+  -H "Authorization: Bearer polar_pat_..."
+```

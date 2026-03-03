@@ -1,0 +1,469 @@
+---
+title: "Orders"
+description: "Track purchases and manage invoices"
+---
+
+Orders represent completed purchases in Polar, created from both one-time checkouts and subscription billing cycles. Each order contains full payment details, line items, tax calculations, and generates an invoice.
+
+## Overview
+
+Orders are created when:
+
+- A one-time checkout completes successfully
+- A subscription renews (billing cycle)
+- A subscription is created (initial payment)
+- A subscription is upgraded/downgraded (prorated amount)
+
+## Order Structure
+
+Each order contains:
+
+```typescript
+{
+  id: "order_xxx",
+  status: "paid",
+  paid: true,
+  
+  // Amounts (all in cents)
+  subtotal_amount: 10000,       // Before discounts/tax
+  discount_amount: 1000,        // Applied discounts
+  net_amount: 9000,             // After discounts
+  tax_amount: 720,              // Sales tax
+  total_amount: 9720,           // Final amount
+  refunded_amount: 0,           // Refunds issued
+  
+  // Payment
+  currency: "usd",
+  applied_balance_amount: 0,    // Customer balance used
+  due_amount: 0,                // Remaining to pay
+  
+  // Relations
+  customer_id: "customer_xxx",
+  product_id: "product_xxx",
+  subscription_id: "sub_xxx",   // For recurring orders
+  discount_id: "discount_xxx",
+  checkout_id: "checkout_xxx",
+  
+  // Invoice
+  invoice_number: "INV-2024-0001",
+  is_invoice_generated: true,
+  billing_name: "Jane Doe",
+  billing_address: { /* ... */ },
+  
+  // Context
+  billing_reason: "purchase",    // or subscription_create, subscription_cycle, etc.
+  seats: null,                   // For seat-based orders
+  metadata: { /* ... */ },
+  custom_field_data: { /* ... */ }
+}
+```
+
+## Order Status
+
+<Tabs>
+  <Tab title="paid">
+    Payment successful. Benefits granted. Most common status.
+  </Tab>
+  <Tab title="succeeded">
+    Legacy status, equivalent to paid.
+  </Tab>
+  <Tab title="refunded">
+    Fully refunded. Benefits may be revoked.
+  </Tab>
+  <Tab title="partially_refunded">
+    Partial refund issued. Order still valid.
+  </Tab>
+</Tabs>
+
+## Billing Reasons
+
+Orders are created for different reasons:
+
+<Tabs>
+  <Tab title="purchase">
+    One-time product purchase via checkout.
+  </Tab>
+  <Tab title="subscription_create">
+    Initial payment when subscription starts.
+  </Tab>
+  <Tab title="subscription_cycle">
+    Regular subscription renewal charge.
+  </Tab>
+  <Tab title="subscription_update">
+    Prorated charge from subscription change.
+  </Tab>
+</Tabs>
+
+## Line Items
+
+Orders contain itemized charges:
+
+```typescript
+const order = await polar.orders.get(orderId);
+
+order.items.forEach(item => {
+  console.log(item.label);          // "Pro Plan"
+  console.log(item.amount / 100);   // 19.00
+  console.log(item.tax_amount / 100); // 1.52
+  console.log(item.proration);      // false
+});
+```
+
+Line items include:
+- Base product charges
+- Metered usage charges
+- Prorated amounts from upgrades
+- Discounts (negative amounts)
+
+## Retrieving Orders
+
+### Get Single Order
+
+```typescript
+const order = await polar.orders.get(orderId);
+```
+
+### List Orders
+
+Query orders with filters:
+
+```typescript
+const { items } = await polar.orders.list({
+  organization_id: [orgId],
+  product_id: [productId],
+  customer_id: [customerId],
+  product_billing_type: ["one_time"],  // or "recurring"
+  checkout_id: [checkoutId],
+  metadata: { campaign: "summer_sale" }
+});
+```
+
+### Export Orders
+
+Export order data as CSV:
+
+```typescript
+const response = await fetch(
+  'https://api.polar.sh/v1/orders/export',
+  {
+    headers: {
+      Authorization: `Bearer ${apiKey}`
+    }
+  }
+);
+const csv = await response.text();
+```
+
+Includes: email, date, product, amount, currency, status, invoice number.
+
+## Invoices
+
+Invoices are automatically generated for all paid orders.
+
+### Invoice Generation
+
+Invoices are generated:
+- Automatically within 24 hours of order creation
+- Manually via API trigger
+
+```typescript
+// Trigger invoice generation
+await polar.orders.generateInvoice(orderId);
+```
+
+<Note>
+  Invoice generation requires:
+  - Order status is `paid`
+  - Billing name is set
+  - Billing address is set
+</Note>
+
+### Retrieve Invoice
+
+Get invoice URL for download:
+
+```typescript
+const invoice = await polar.orders.invoice(orderId);
+console.log(invoice.url);  // PDF download URL
+```
+
+### Invoice Details
+
+Invoices contain:
+- Merchant information (Polar as MoR)
+- Customer billing details
+- Line items with descriptions
+- Tax breakdown by jurisdiction
+- Payment method details
+- Sequential invoice number
+
+## Updating Orders
+
+Update billing information on orders:
+
+```typescript
+await polar.orders.update(orderId, {
+  billing_name: "Updated Name",
+  billing_address: {
+    line1: "456 New St",
+    city: "New York",
+    state: "NY",
+    postal_code: "10001",
+    // Country and state cannot be updated
+  }
+});
+```
+
+<Warning>
+  Only billing name and address (except country/state) can be updated. Amounts and products are immutable.
+</Warning>
+
+## Customer Balance
+
+Orders can use customer account balance:
+
+```typescript
+{
+  applied_balance_amount: 500,  // $5.00 from balance
+  total_amount: 9720,           // Total order amount
+  due_amount: 9220              // Charged to payment method
+}
+```
+
+Balance can be:
+- **Positive**: Customer has credit, reduces due amount
+- **Negative**: Customer owes money, increases due amount
+- Applied automatically at checkout
+
+See [Balance](/features/finance/balance) for details.
+
+## Refunds
+
+Refunds are processed through the dashboard or refunds API:
+
+```typescript
+// Refund handled via refunds endpoint
+// Updates order.refunded_amount
+```
+
+Partial refunds are supported:
+
+```typescript
+{
+  total_amount: 9720,
+  refunded_amount: 1000,         // $10 refunded
+  refunded_tax_amount: 80,       // $0.80 tax refunded
+  status: "partially_refunded"
+}
+```
+
+See [Refunds](/features/refunds) for full documentation.
+
+## Metadata & Custom Fields
+
+### Metadata
+
+Metadata is inherited from:
+1. Checkout session metadata
+2. Product metadata
+
+```typescript
+const order = await polar.orders.get(orderId);
+console.log(order.metadata);
+// { campaign: "summer", source: "website" }
+```
+
+### Custom Field Data
+
+Custom field responses collected at checkout:
+
+```typescript
+console.log(order.custom_field_data);
+// { [fieldId]: "Customer's response" }
+```
+
+## Seat-Based Orders
+
+For seat-based products:
+
+```typescript
+{
+  seats: 10,                  // Number of seats purchased
+  subtotal_amount: 10000,     // 10 seats × $10/seat
+  product_price_id: "price_xxx"
+}
+```
+
+## Related Entities
+
+### Customer
+
+Access customer information:
+
+```typescript
+const order = await polar.orders.get(orderId);
+console.log(order.customer.email);
+console.log(order.customer.name);
+```
+
+### Product
+
+Product details at time of purchase:
+
+```typescript
+console.log(order.product.name);
+console.log(order.product.description);
+```
+
+### Subscription
+
+For recurring orders:
+
+```typescript
+if (order.subscription_id) {
+  const subscription = await polar.subscriptions.get(order.subscription_id);
+  console.log('Subscription interval:', subscription.recurring_interval);
+}
+```
+
+### Discount
+
+Applied discount details:
+
+```typescript
+if (order.discount) {
+  console.log(order.discount.name);
+  console.log(order.discount.code);
+}
+```
+
+## Tax Details
+
+Orders include full tax breakdown:
+
+```typescript
+{
+  subtotal_amount: 10000,   // Pre-tax amount
+  tax_amount: 720,          // Total tax
+  total_amount: 10720,      // Includes tax
+  
+  billing_address: {
+    country: "US",
+    state: "CA"             // Determines tax jurisdiction
+  }
+}
+```
+
+Polar handles:
+- Sales tax calculation
+- VAT collection
+- Reverse charge for B2B
+- Tax exemptions
+
+See [Merchant of Record](/merchant-of-record/introduction) for details.
+
+## Webhooks
+
+Listen for order events:
+
+<CardGroup cols={2}>
+  <Card title="order.created" icon="plus">
+    New order created and paid
+  </Card>
+  <Card title="order.updated" icon="pen">
+    Order information updated
+  </Card>
+  <Card title="order.refunded" icon="rotate-left">
+    Order fully or partially refunded
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Fulfillment">
+    - Listen for `order.created` webhook for fulfillment triggers
+    - Check `order.paid` and `billing_reason` to determine fulfillment type
+    - For digital goods, benefits are granted automatically
+  </Accordion>
+
+  <Accordion title="Invoices">
+    - Ensure billing name and address are collected at checkout
+    - Generate invoices immediately for B2B customers
+    - Store invoice URLs for customer access
+  </Accordion>
+
+  <Accordion title="Reconciliation">
+    - Use `invoice_number` for accounting systems
+    - Filter by `created_at` for period-based reports
+    - Export regularly for financial records
+  </Accordion>
+
+  <Accordion title="Customer Support">
+    - Search orders by customer email via customer_id filter
+    - Check `custom_field_data` for support context
+    - Review line items for usage charges
+  </Accordion>
+
+  <Accordion title="Refunds">
+    - Check `refunded_amount` before issuing additional refunds
+    - Track refund reasons in metadata
+    - Handle partial refunds for subscription prorations
+  </Accordion>
+</AccordionGroup>
+
+## Common Patterns
+
+### Find Customer Orders
+
+```typescript
+const { items: orders } = await polar.orders.list({
+  customer_id: [customerId],
+  sorting: ["-created_at"]
+});
+```
+
+### Calculate Revenue
+
+```typescript
+const { items: orders } = await polar.orders.list({
+  organization_id: [orgId]
+});
+
+const totalRevenue = orders.reduce((sum, order) => {
+  return sum + (order.net_amount - order.refunded_amount);
+}, 0);
+```
+
+### Subscription Order History
+
+```typescript
+const { items: orders } = await polar.orders.list({
+  product_billing_type: ["recurring"],
+  customer_id: [customerId],
+  sorting: ["-created_at"]
+});
+```
+
+## API Reference
+
+<CardGroup cols={2}>
+  <Card title="List Orders" icon="list" href="/api-reference/orders">
+    Query orders with filters
+  </Card>
+  <Card title="Get Order" icon="eye" href="/api-reference/orders">
+    Retrieve order details
+  </Card>
+  <Card title="Update Order" icon="pen" href="/api-reference/orders">
+    Update billing information
+  </Card>
+  <Card title="Generate Invoice" icon="file-invoice" href="/api-reference/orders">
+    Trigger invoice generation
+  </Card>
+  <Card title="Get Invoice" icon="download" href="/api-reference/orders">
+    Retrieve invoice URL
+  </Card>
+  <Card title="Export Orders" icon="file-export" href="/api-reference/orders">
+    Export as CSV
+  </Card>
+</CardGroup>

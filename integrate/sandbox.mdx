@@ -1,0 +1,420 @@
+---
+title: "Sandbox Environment"
+description: "Test your Polar integration safely"
+icon: "flask"
+---
+
+Polar provides a sandbox environment that allows you to test your integration without affecting production data or processing real payments.
+
+## Environment Modes
+
+Polar operates in different environment modes:
+
+<CardGroup cols={2}>
+  <Card title="Production" icon="building">
+    Live environment with real payments and customer data.
+    
+    **API Base URL**: `https://api.polar.sh`
+  </Card>
+
+  <Card title="Sandbox" icon="flask">
+    Test environment with simulated payments for safe testing.
+    
+    **API Base URL**: `https://sandbox.polar.sh` (same as production during testing)
+  </Card>
+</CardGroup>
+
+<Note>
+The sandbox environment uses the same API endpoints as production. The key difference is in the Stripe configuration and organization settings, not the API URL.
+</Note>
+
+## How Sandbox Mode Works
+
+Sandbox mode is configured at the **organization level**, not through a separate API endpoint:
+
+1. **Stripe Test Mode**: Organizations in sandbox use Stripe's test mode, which means:
+   - No real money is processed
+   - You can use Stripe test card numbers
+   - Webhooks are triggered with test data
+
+2. **Isolated Data**: Each organization's sandbox data is isolated:
+   - Separate customers, subscriptions, and orders
+   - Test payments don't affect production metrics
+   - Safe to experiment with any API operations
+
+3. **Same API**: Use the same API endpoints and SDKs:
+   - Authentication works the same way
+   - All API features are available
+   - Webhooks function identically
+
+## Setting Up Sandbox Testing
+
+<Steps>
+  <Step title="Create a test organization">
+    Create a separate organization in Polar specifically for testing.
+  </Step>
+
+  <Step title="Configure Stripe test mode">
+    Connect your organization to Stripe using test mode credentials:
+    - Use Stripe test API keys
+    - Configure test webhook endpoints
+    - All payments will use Stripe's test environment
+  </Step>
+
+  <Step title="Get API credentials">
+    Generate an Organization Access Token or Personal Access Token for your test organization.
+    
+    ```bash
+    # Your token will work with the same API URL
+    export POLAR_ACCESS_TOKEN="polar_oat_test_..."
+    ```
+  </Step>
+
+  <Step title="Start testing">
+    Make API calls using your test organization credentials.
+  </Step>
+</Steps>
+
+## Test Payment Methods
+
+When your organization is connected to Stripe in test mode, you can use Stripe's test card numbers:
+
+<AccordionGroup>
+  <Accordion title="Successful Payments">
+    ```
+    Card Number: 4242 4242 4242 4242
+    Expiry: Any future date
+    CVC: Any 3 digits
+    ZIP: Any 5 digits
+    ```
+  </Accordion>
+
+  <Accordion title="Failed Payments">
+    ```
+    Card Declined: 4000 0000 0000 0002
+    Insufficient Funds: 4000 0000 0000 9995
+    Expired Card: 4000 0000 0000 0069
+    ```
+  </Accordion>
+
+  <Accordion title="3D Secure Authentication">
+    ```
+    Requires Authentication: 4000 0025 0000 3155
+    Authentication Failed: 4000 0000 0000 9987
+    ```
+  </Accordion>
+
+  <Accordion title="Special Scenarios">
+    ```
+    Processing Error: 4000 0000 0000 0119
+    Disputed Payment: 4000 0000 0000 0259
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+For a complete list of Stripe test cards, see [Stripe's testing documentation](https://stripe.com/docs/testing).
+</Tip>
+
+## Testing Subscriptions
+
+Test the complete subscription lifecycle in sandbox mode:
+
+<CodeGroup>
+```bash Create Test Subscription
+curl -X POST https://api.polar.sh/v1/subscriptions \
+  -H "Authorization: Bearer YOUR_TEST_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product_id": "prod_test_123",
+    "customer_id": "cus_test_456"
+  }'
+```
+
+```typescript TypeScript
+const polar = new Polar({
+  accessToken: process.env.POLAR_TEST_TOKEN,
+});
+
+const subscription = await polar.subscriptions.create({
+  productId: "prod_test_123",
+  customerId: "cus_test_456",
+});
+```
+
+```python Python
+polar = Polar(
+    access_token=os.environ["POLAR_TEST_TOKEN"]
+)
+
+subscription = polar.subscriptions.create(
+    product_id="prod_test_123",
+    customer_id="cus_test_456",
+)
+```
+</CodeGroup>
+
+## Testing Webhooks
+
+Webhooks work the same way in sandbox mode:
+
+<Steps>
+  <Step title="Set up local webhook endpoint">
+    Use a tool like [ngrok](https://ngrok.com) or [localtunnel](https://localtunnel.github.io/www/) to expose your local server:
+    
+    ```bash
+    ngrok http 3000
+    ```
+  </Step>
+
+  <Step title="Configure webhook in Polar">
+    Add your webhook endpoint URL in your test organization settings:
+    
+    ```
+    https://your-subdomain.ngrok.io/webhooks/polar
+    ```
+  </Step>
+
+  <Step title="Test events">
+    Trigger events by performing actions in your sandbox organization:
+    - Create a customer
+    - Start a subscription
+    - Process a test payment
+    - Cancel a subscription
+  </Step>
+
+  <Step title="Verify delivery">
+    Check your webhook endpoint receives events with test data.
+  </Step>
+</Steps>
+
+<Note>
+For more details on webhook setup and testing, see our [Webhooks documentation](/integrate/webhooks/endpoints).
+</Note>
+
+## Testing Customer State
+
+Verify customer entitlements and subscriptions using the Customer State API:
+
+<CodeGroup>
+```bash curl
+curl https://api.polar.sh/v1/customers/cus_test_123/state \
+  -H "Authorization: Bearer YOUR_TEST_TOKEN"
+```
+
+```typescript TypeScript
+const state = await polar.customers.getState({
+  id: "cus_test_123",
+});
+
+console.log(state.activeSubscriptions);
+console.log(state.grantedBenefits);
+```
+
+```python Python
+state = polar.customers.get_state(
+    id="cus_test_123"
+)
+
+print(state.active_subscriptions)
+print(state.granted_benefits)
+```
+</CodeGroup>
+
+## Testing Usage-Based Billing
+
+Test meters and event ingestion in sandbox mode:
+
+<CodeGroup>
+```bash Send Test Event
+curl -X POST https://api.polar.sh/v1/events \
+  -H "Authorization: Bearer YOUR_TEST_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_name": "api_request",
+    "customer_id": "cus_test_123",
+    "properties": {
+      "endpoint": "/api/data",
+      "method": "GET"
+    }
+  }'
+```
+
+```typescript TypeScript
+await polar.events.create({
+  eventName: "api_request",
+  customerId: "cus_test_123",
+  properties: {
+    endpoint: "/api/data",
+    method: "GET",
+  },
+});
+```
+
+```python Python
+polar.events.create(
+    event_name="api_request",
+    customer_id="cus_test_123",
+    properties={
+        "endpoint": "/api/data",
+        "method": "GET",
+    },
+)
+```
+</CodeGroup>
+
+## Common Test Scenarios
+
+<AccordionGroup>
+  <Accordion title="New Customer Onboarding">
+    1. Create a test customer
+    2. Create a checkout session
+    3. Use a test card to complete payment
+    4. Verify subscription activation
+    5. Check webhook delivery
+    6. Query customer state
+  </Accordion>
+
+  <Accordion title="Subscription Lifecycle">
+    1. Create active subscription
+    2. Test usage tracking (if applicable)
+    3. Simulate subscription renewal
+    4. Test subscription cancellation
+    5. Verify cancellation webhooks
+    6. Check benefit revocation
+  </Accordion>
+
+  <Accordion title="Payment Failures">
+    1. Create subscription with failing card
+    2. Observe payment failure webhooks
+    3. Test payment retry logic
+    4. Update payment method
+    5. Verify successful retry
+  </Accordion>
+
+  <Accordion title="Upgrades & Downgrades">
+    1. Create subscription on lower tier
+    2. Upgrade to higher tier mid-cycle
+    3. Verify prorated billing
+    4. Check updated benefits
+    5. Test downgrade scenario
+  </Accordion>
+</AccordionGroup>
+
+## SDK Configuration for Testing
+
+Configure your SDKs to use test credentials:
+
+<CodeGroup>
+```typescript TypeScript
+// Load different tokens based on environment
+const polar = new Polar({
+  accessToken: process.env.NODE_ENV === 'production'
+    ? process.env.POLAR_PROD_TOKEN
+    : process.env.POLAR_TEST_TOKEN,
+});
+```
+
+```python Python
+import os
+
+polar = Polar(
+    access_token=os.getenv("POLAR_PROD_TOKEN" if os.getenv("ENV") == "production" else "POLAR_TEST_TOKEN")
+)
+```
+
+```php PHP
+$polar = Polar::make(
+    accessToken: getenv('ENV') === 'production'
+        ? getenv('POLAR_PROD_TOKEN')
+        : getenv('POLAR_TEST_TOKEN')
+);
+```
+
+```go Go
+var token string
+if os.Getenv("ENV") == "production" {
+    token = os.Getenv("POLAR_PROD_TOKEN")
+} else {
+    token = os.Getenv("POLAR_TEST_TOKEN")
+}
+
+client := polar.NewClient(
+    polar.WithAccessToken(token),
+)
+```
+</CodeGroup>
+
+## Debugging Tips
+
+<CardGroup cols={2}>
+  <Card title="Check Stripe Dashboard" icon="stripe">
+    View test payments and events in your Stripe test dashboard to verify payment processing.
+  </Card>
+
+  <Card title="Monitor Webhooks" icon="bell">
+    Use the webhook logs in Polar dashboard to see delivery status and payloads.
+  </Card>
+
+  <Card title="API Logs" icon="list">
+    Enable detailed logging in your application to track API requests and responses.
+  </Card>
+
+  <Card title="Network Inspector" icon="network-wired">
+    Use browser dev tools or tools like [Postman](https://www.postman.com) to inspect API calls.
+  </Card>
+</CardGroup>
+
+## Moving to Production
+
+When ready to go live:
+
+<Steps>
+  <Step title="Complete Polar account review">
+    Ensure your production organization is approved by Polar's compliance team.
+  </Step>
+
+  <Step title="Connect production Stripe account">
+    Switch from Stripe test mode to live mode in your organization settings.
+  </Step>
+
+  <Step title="Update API credentials">
+    Generate new Organization Access Tokens for your production organization.
+  </Step>
+
+  <Step title="Update webhook endpoints">
+    Configure webhook URLs to point to your production servers.
+  </Step>
+
+  <Step title="Deploy with production tokens">
+    Update your application environment variables with production credentials.
+  </Step>
+
+  <Step title="Monitor initial transactions">
+    Closely monitor your first production transactions to ensure everything works correctly.
+  </Step>
+</Steps>
+
+<Warning>
+Never use production credentials in test environments or commit them to version control. Keep production and test credentials strictly separated.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="key" href="/integrate/authentication">
+    Learn about API authentication methods
+  </Card>
+
+  <Card title="Customer State" icon="users" href="/integrate/customer-state">
+    Check customer entitlements and subscriptions
+  </Card>
+
+  <Card title="Webhooks" icon="webhook" href="/integrate/webhooks/endpoints">
+    Set up real-time event notifications
+  </Card>
+
+  <Card title="API Reference" icon="code" href="/api-reference/introduction">
+    Explore the complete API documentation
+  </Card>
+</CardGroup>

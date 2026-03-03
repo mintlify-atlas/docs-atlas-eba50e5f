@@ -1,0 +1,635 @@
+---
+title: 'Laravel Integration'
+description: 'Complete guide to integrating Polar with Laravel for subscriptions and payments'
+---
+
+This guide shows you how to integrate Polar into a Laravel application with checkout, webhooks, and customer portal functionality.
+
+## Prerequisites
+
+- Laravel 10+ or 11+
+- PHP 8.1+
+- Composer
+- Polar account with API keys
+
+## Installation
+
+Install the Polar PHP SDK:
+
+```bash
+composer require polar-sh/polar-php
+```
+
+## Environment Configuration
+
+Add your Polar credentials to `.env`:
+
+```bash
+POLAR_API_KEY=polar_sk_...
+POLAR_ORGANIZATION_ID=your-org-id
+POLAR_WEBHOOK_SECRET=whsec_...
+```
+
+Add to `config/services.php`:
+
+```php
+return [
+    // ...
+    
+    'polar' => [
+        'api_key' => env('POLAR_API_KEY'),
+        'organization_id' => env('POLAR_ORGANIZATION_ID'),
+        'webhook_secret' => env('POLAR_WEBHOOK_SECRET'),
+    ],
+];
+```
+
+## Service Provider Setup
+
+Create a Polar service provider:
+
+```bash
+php artisan make:provider PolarServiceProvider
+```
+
+Update `app/Providers/PolarServiceProvider.php`:
+
+```php
+<?php
+
+namespace App\Providers;
+
+use Illuminate\Support\ServiceProvider;
+use Polar\Polar;
+
+class PolarServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        $this->app->singleton(Polar::class, function ($app) {
+            return new Polar(
+                accessToken: config('services.polar.api_key')
+            );
+        });
+    }
+
+    public function boot(): void
+    {
+        //
+    }
+}
+```
+
+Register the provider in `bootstrap/providers.php` (Laravel 11) or `config/app.php` (Laravel 10):
+
+```php
+return [
+    App\Providers\PolarServiceProvider::class,
+];
+```
+
+## Database Setup
+
+Create migrations for storing customer and subscription data:
+
+```bash
+php artisan make:migration create_polar_customers_table
+php artisan make:migration create_polar_subscriptions_table
+```
+
+**Customers migration:**
+
+```php
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('polar_customers', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->string('polar_customer_id')->unique();
+            $table->string('email');
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('polar_customers');
+    }
+};
+```
+
+**Subscriptions migration:**
+
+```php
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('polar_subscriptions', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->string('polar_subscription_id')->unique();
+            $table->string('polar_product_id');
+            $table->string('status');
+            $table->integer('amount');
+            $table->string('currency');
+            $table->string('recurring_interval');
+            $table->timestamp('current_period_start');
+            $table->timestamp('current_period_end');
+            $table->boolean('cancel_at_period_end')->default(false);
+            $table->timestamp('canceled_at')->nullable();
+            $table->timestamp('ended_at')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('polar_subscriptions');
+    }
+};
+```
+
+Run migrations:
+
+```bash
+php artisan migrate
+```
+
+## Models
+
+Create `app/Models/PolarCustomer.php`:
+
+```php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class PolarCustomer extends Model
+{
+    protected $fillable = [
+        'user_id',
+        'polar_customer_id',
+        'email',
+    ];
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function subscriptions(): HasMany
+    {
+        return $this->hasMany(PolarSubscription::class, 'user_id', 'user_id');
+    }
+}
+```
+
+Create `app/Models/PolarSubscription.php`:
+
+```php
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class PolarSubscription extends Model
+{
+    protected $fillable = [
+        'user_id',
+        'polar_subscription_id',
+        'polar_product_id',
+        'status',
+        'amount',
+        'currency',
+        'recurring_interval',
+        'current_period_start',
+        'current_period_end',
+        'cancel_at_period_end',
+        'canceled_at',
+        'ended_at',
+    ];
+
+    protected $casts = [
+        'amount' => 'integer',
+        'cancel_at_period_end' => 'boolean',
+        'current_period_start' => 'datetime',
+        'current_period_end' => 'datetime',
+        'canceled_at' => 'datetime',
+        'ended_at' => 'datetime',
+    ];
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    public function isActive(): bool
+    {
+        return in_array($this->status, ['active', 'trialing']) 
+            && !$this->ended_at;
+    }
+}
+```
+
+## Products Controller
+
+Create a controller to display products:
+
+```bash
+php artisan make:controller ProductController
+```
+
+**app/Http/Controllers/ProductController.php:**
+
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use Polar\Polar;
+use Illuminate\Http\Request;
+use Illuminate\View\View;
+
+class ProductController extends Controller
+{
+    public function __construct(
+        private Polar $polar
+    ) {}
+
+    public function index(): View
+    {
+        $products = $this->polar->products->list(
+            organizationId: config('services.polar.organization_id')
+        );
+
+        return view('products.index', [
+            'products' => $products->items,
+        ]);
+    }
+}
+```
+
+## Checkout Controller
+
+Create a controller for checkout:
+
+```bash
+php artisan make:controller CheckoutController
+```
+
+**app/Http/Controllers/CheckoutController.php:**
+
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use Polar\Polar;
+use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Auth;
+
+class CheckoutController extends Controller
+{
+    public function __construct(
+        private Polar $polar
+    ) {}
+
+    public function create(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'product_price_id' => 'required|string',
+        ]);
+
+        try {
+            $checkout = $this->polar->checkouts->create(
+                productPriceId: $request->product_price_id,
+                successUrl: route('checkout.success', ['checkout_id' => '{CHECKOUT_ID}']),
+                customerEmail: Auth::user()?->email,
+                metadata: [
+                    'user_id' => Auth::id(),
+                ]
+            );
+
+            return redirect($checkout->url);
+        } catch (\Exception $e) {
+            return back()->with('error', 'Failed to create checkout: ' . $e->getMessage());
+        }
+    }
+
+    public function success(Request $request)
+    {
+        $checkoutId = $request->query('checkout_id');
+
+        if (!$checkoutId) {
+            return redirect()->route('products.index');
+        }
+
+        try {
+            $checkout = $this->polar->checkouts->get($checkoutId);
+
+            return view('checkout.success', [
+                'checkout' => $checkout,
+            ]);
+        } catch (\Exception $e) {
+            return redirect()->route('products.index')
+                ->with('error', 'Unable to verify checkout');
+        }
+    }
+}
+```
+
+## Views
+
+Create `resources/views/products/index.blade.php`:
+
+```php
+<x-app-layout>
+    <div class="py-12">
+        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+            <h1 class="text-3xl font-bold mb-8">Available Plans</h1>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                @foreach($products as $product)
+                    <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                        <div class="p-6">
+                            <h2 class="text-2xl font-semibold mb-2">{{ $product->name }}</h2>
+                            <p class="text-gray-600 mb-4">{{ $product->description }}</p>
+
+                            @foreach($product->prices as $price)
+                                <div class="mb-4">
+                                    <p class="text-lg font-bold">
+                                        ${{ $price->amount / 100 }}
+                                        @if($price->recurringInterval)
+                                            <span class="text-sm text-gray-500">/ {{ $price->recurringInterval }}</span>
+                                        @endif
+                                    </p>
+
+                                    <form method="POST" action="{{ route('checkout.create') }}">
+                                        @csrf
+                                        <input type="hidden" name="product_price_id" value="{{ $price->id }}">
+                                        <button 
+                                            type="submit" 
+                                            class="mt-2 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
+                                        >
+                                            Subscribe Now
+                                        </button>
+                                    </form>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    </div>
+</x-app-layout>
+```
+
+Create `resources/views/checkout/success.blade.php`:
+
+```php
+<x-app-layout>
+    <div class="py-12">
+        <div class="max-w-3xl mx-auto sm:px-6 lg:px-8">
+            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
+                <div class="p-6">
+                    @if($checkout->status === 'confirmed')
+                        <h1 class="text-2xl font-bold text-green-600 mb-4">Payment Successful!</h1>
+                        <p class="mb-4">Thank you for your purchase. You'll receive a confirmation email shortly.</p>
+                        
+                        <div class="bg-gray-100 p-4 rounded-lg">
+                            <p><strong>Order ID:</strong> {{ $checkout->id }}</p>
+                            <p><strong>Amount:</strong> ${{ $checkout->amount / 100 }} {{ $checkout->currency }}</p>
+                        </div>
+
+                        <a href="{{ route('dashboard') }}" class="inline-block mt-6 bg-blue-600 text-white px-6 py-2 rounded-lg">
+                            Go to Dashboard
+                        </a>
+                    @else
+                        <h1 class="text-2xl font-bold mb-4">Processing Payment...</h1>
+                        <p>Your payment is being processed. Please wait.</p>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
+</x-app-layout>
+```
+
+## Webhook Handler
+
+Create a webhook controller:
+
+```bash
+php artisan make:controller WebhookController
+```
+
+**app/Http/Controllers/WebhookController.php:**
+
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\PolarCustomer;
+use App\Models\PolarSubscription;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Polar\Polar;
+
+class WebhookController extends Controller
+{
+    public function __construct(
+        private Polar $polar
+    ) {}
+
+    public function handle(Request $request): Response
+    {
+        $signature = $request->header('polar-signature');
+
+        if (!$signature) {
+            return response('Missing signature', 401);
+        }
+
+        try {
+            $event = $this->polar->webhooks->verifyEvent(
+                $request->getContent(),
+                $signature,
+                config('services.polar.webhook_secret')
+            );
+        } catch (\Exception $e) {
+            return response('Invalid signature', 401);
+        }
+
+        match ($event->type) {
+            'checkout.updated' => $this->handleCheckoutUpdated($event->data),
+            'subscription.created' => $this->handleSubscriptionCreated($event->data),
+            'subscription.updated' => $this->handleSubscriptionUpdated($event->data),
+            'subscription.canceled' => $this->handleSubscriptionCanceled($event->data),
+            'subscription.revoked' => $this->handleSubscriptionRevoked($event->data),
+            default => null,
+        };
+
+        return response('Webhook handled', 200);
+    }
+
+    private function handleCheckoutUpdated(object $checkout): void
+    {
+        if ($checkout->status !== 'confirmed') {
+            return;
+        }
+
+        // Store customer if new
+        if ($checkout->customer && isset($checkout->metadata['user_id'])) {
+            PolarCustomer::updateOrCreate(
+                ['polar_customer_id' => $checkout->customer->id],
+                [
+                    'user_id' => $checkout->metadata['user_id'],
+                    'email' => $checkout->customer->email,
+                ]
+            );
+        }
+    }
+
+    private function handleSubscriptionCreated(object $subscription): void
+    {
+        $userId = $this->getUserIdFromCustomer($subscription->customerId);
+
+        if (!$userId) {
+            return;
+        }
+
+        PolarSubscription::create([
+            'user_id' => $userId,
+            'polar_subscription_id' => $subscription->id,
+            'polar_product_id' => $subscription->productId,
+            'status' => $subscription->status,
+            'amount' => $subscription->amount,
+            'currency' => $subscription->currency,
+            'recurring_interval' => $subscription->recurringInterval,
+            'current_period_start' => $subscription->currentPeriodStart,
+            'current_period_end' => $subscription->currentPeriodEnd,
+            'cancel_at_period_end' => $subscription->cancelAtPeriodEnd ?? false,
+        ]);
+    }
+
+    private function handleSubscriptionUpdated(object $subscription): void
+    {
+        PolarSubscription::where('polar_subscription_id', $subscription->id)
+            ->update([
+                'status' => $subscription->status,
+                'amount' => $subscription->amount,
+                'current_period_start' => $subscription->currentPeriodStart,
+                'current_period_end' => $subscription->currentPeriodEnd,
+                'cancel_at_period_end' => $subscription->cancelAtPeriodEnd ?? false,
+            ]);
+    }
+
+    private function handleSubscriptionCanceled(object $subscription): void
+    {
+        PolarSubscription::where('polar_subscription_id', $subscription->id)
+            ->update([
+                'cancel_at_period_end' => true,
+                'canceled_at' => now(),
+            ]);
+    }
+
+    private function handleSubscriptionRevoked(object $subscription): void
+    {
+        PolarSubscription::where('polar_subscription_id', $subscription->id)
+            ->update([
+                'status' => 'canceled',
+                'ended_at' => now(),
+            ]);
+    }
+
+    private function getUserIdFromCustomer(string $customerId): ?int
+    {
+        return PolarCustomer::where('polar_customer_id', $customerId)
+            ->value('user_id');
+    }
+}
+```
+
+## Routes
+
+Add routes to `routes/web.php`:
+
+```php
+use App\Http\Controllers\CheckoutController;
+use App\Http\Controllers\ProductController;
+use App\Http\Controllers\WebhookController;
+
+// Public routes
+Route::get('/products', [ProductController::class, 'index'])->name('products.index');
+
+// Authenticated routes
+Route::middleware('auth')->group(function () {
+    Route::post('/checkout', [CheckoutController::class, 'create'])->name('checkout.create');
+    Route::get('/checkout/success', [CheckoutController::class, 'success'])->name('checkout.success');
+});
+
+// Webhook (exclude from CSRF)
+Route::post('/webhooks/polar', [WebhookController::class, 'handle'])
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class]);
+```
+
+## Testing
+
+<Steps>
+  <Step title="Start development server">
+    ```bash
+    php artisan serve
+    ```
+  </Step>
+  
+  <Step title="Visit products page">
+    Navigate to `http://localhost:8000/products`
+  </Step>
+  
+  <Step title="Test checkout">
+    Click subscribe and use test card `4242 4242 4242 4242`
+  </Step>
+  
+  <Step title="Verify webhook">
+    Use ngrok for local webhook testing:
+    ```bash
+    ngrok http 8000
+    ```
+    Add the ngrok URL + `/webhooks/polar` to Polar dashboard
+  </Step>
+</Steps>
+
+## Production Checklist
+
+- Set up proper error logging
+- Implement queue workers for webhook processing
+- Add indexes to database tables
+- Set up monitoring and alerts
+- Verify webhook signature on all requests
+- Use HTTPS in production
+- Implement rate limiting
+
+## Next Steps
+
+- [Handle subscription upgrades](/guides/subscription-upgrades)
+- [Implement seat-based pricing](/guides/seat-based-pricing)
+- [Build customer portal](/api-reference/customer-portal/overview)

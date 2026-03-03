@@ -1,0 +1,274 @@
+---
+title: Orders
+description: View and manage customer orders
+---
+
+## Overview
+
+Orders represent completed purchases. They're created when customers complete checkout sessions or when subscriptions renew.
+
+## The Order Object
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the order
+</ResponseField>
+
+<ResponseField name="status" type="enum" required>
+  Status: `pending`, `paid`, `refunded`, or `failed`
+</ResponseField>
+
+<ResponseField name="customer_id" type="string" required>
+  ID of the customer
+</ResponseField>
+
+<ResponseField name="product_id" type="string" required>
+  ID of the product
+</ResponseField>
+
+<ResponseField name="product_price_id" type="string" required>
+  ID of the price
+</ResponseField>
+
+<ResponseField name="subscription_id" type="string">
+  Associated subscription ID (for recurring orders)
+</ResponseField>
+
+<ResponseField name="checkout_id" type="string">
+  Associated checkout session ID
+</ResponseField>
+
+<ResponseField name="amount" type="integer" required>
+  Total amount in cents
+</ResponseField>
+
+<ResponseField name="tax_amount" type="integer" required>
+  Tax amount in cents
+</ResponseField>
+
+<ResponseField name="net_amount" type="integer" required>
+  Net amount (after tax) in cents
+</ResponseField>
+
+<ResponseField name="currency" type="string" required>
+  Three-letter ISO currency code
+</ResponseField>
+
+<ResponseField name="description" type="string" required>
+  Order description
+</ResponseField>
+
+<ResponseField name="invoice_number" type="string">
+  Invoice number
+</ResponseField>
+
+<ResponseField name="billing_address" type="object">
+  Customer's billing address
+</ResponseField>
+
+<ResponseField name="discount_id" type="string">
+  Applied discount ID
+</ResponseField>
+
+<ResponseField name="metadata" type="object">
+  Custom metadata
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  Creation timestamp
+</ResponseField>
+
+---
+
+## List Orders
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/orders" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Query Parameters
+
+<ParamField query="organization_id" type="string">
+  Filter by organization
+</ParamField>
+
+<ParamField query="product_id" type="string">
+  Filter by product
+</ParamField>
+
+<ParamField query="product_billing_type" type="enum">
+  Filter by type: `recurring` (subscription renewals) or `one_time`
+</ParamField>
+
+<ParamField query="discount_id" type="string">
+  Filter by discount
+</ParamField>
+
+<ParamField query="customer_id" type="string">
+  Filter by customer
+</ParamField>
+
+<ParamField query="external_customer_id" type="string">
+  Filter by external customer ID
+</ParamField>
+
+<ParamField query="checkout_id" type="string">
+  Filter by checkout session
+</ParamField>
+
+<ParamField query="metadata" type="object">
+  Filter by metadata
+</ParamField>
+
+---
+
+## Get Order
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/orders/{id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Order ID
+</ParamField>
+
+---
+
+## Update Order
+
+```bash cURL
+curl -X PATCH "https://api.polar.sh/v1/orders/{id}" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metadata": {
+      "fulfillment_status": "shipped"
+    }
+  }'
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Order ID
+</ParamField>
+
+### Request Body
+
+<ParamField body="metadata" type="object">
+  Update metadata
+</ParamField>
+
+---
+
+## Get Invoice
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/orders/{id}/invoice" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+Get the invoice data for an order.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Order ID
+</ParamField>
+
+### Response
+
+<ResponseField name="url" type="string">
+  URL to download the invoice PDF
+</ResponseField>
+
+<ResponseField name="invoice_number" type="string">
+  Invoice number
+</ResponseField>
+
+---
+
+## Generate Invoice
+
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/orders/{id}/invoice" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+Trigger invoice generation for an order.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Order ID
+</ParamField>
+
+### Response
+
+<ResponseField name="202" type="Accepted">
+  Invoice generation started
+</ResponseField>
+
+### Errors
+
+<ResponseField name="422" type="Unprocessable Entity">
+  Order is not paid or missing billing details
+</ResponseField>
+
+---
+
+## Export Orders
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/orders/export" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Query Parameters
+
+<ParamField query="organization_id" type="string">
+  Filter by organization
+</ParamField>
+
+<ParamField query="product_id" type="string">
+  Filter by product
+</ParamField>
+
+### Response
+
+Returns a CSV file with order data.
+
+---
+
+## Examples
+
+### Get Customer's Orders
+
+```bash
+curl -X GET "https://api.polar.sh/v1/orders?customer_id=cust_123" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Filter Subscription Orders
+
+```bash
+curl -X GET "https://api.polar.sh/v1/orders?product_billing_type=recurring" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Update Order Metadata
+
+```bash
+curl -X PATCH "https://api.polar.sh/v1/orders/order_123" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metadata": {
+      "shipped_at": "2024-01-15T10:00:00Z",
+      "tracking_number": "1Z999AA10123456784"
+    }
+  }'
+```

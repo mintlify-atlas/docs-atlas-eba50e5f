@@ -1,0 +1,370 @@
+---
+title: Webhooks
+description: Receive real-time notifications
+---
+
+## Overview
+
+Webhooks allow you to receive HTTP notifications when events occur in your Polar account, such as completed checkouts, new subscriptions, or updated orders.
+
+## The Webhook Endpoint Object
+
+<ResponseField name="id" type="string" required>
+  Unique identifier
+</ResponseField>
+
+<ResponseField name="url" type="string" required>
+  Webhook URL to receive events
+</ResponseField>
+
+<ResponseField name="secret" type="string" required>
+  Secret for verifying webhook signatures
+</ResponseField>
+
+<ResponseField name="events" type="array" required>
+  Array of event types to receive
+</ResponseField>
+
+<ResponseField name="organization_id" type="string" required>
+  Organization ID
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  Creation timestamp
+</ResponseField>
+
+---
+
+## List Webhook Endpoints
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/webhooks/endpoints" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Query Parameters
+
+<ParamField query="organization_id" type="string">
+  Filter by organization
+</ParamField>
+
+---
+
+## Get Webhook Endpoint
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/webhooks/endpoints/{id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Webhook endpoint ID
+</ParamField>
+
+---
+
+## Create Webhook Endpoint
+
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/webhooks/endpoints" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/webhooks/polar",
+    "events": [
+      "checkout.confirmed",
+      "subscription.created",
+      "order.created"
+    ],
+    "organization_id": "org_123"
+  }'
+```
+
+### Request Body
+
+<ParamField body="url" type="string" required>
+  HTTPS URL to receive webhook events
+</ParamField>
+
+<ParamField body="events" type="array" required>
+  Event types to subscribe to
+</ParamField>
+
+<ParamField body="organization_id" type="string">
+  Organization ID (required unless using org token)
+</ParamField>
+
+### Response
+
+Returns the webhook endpoint object including the `secret` for signature verification.
+
+---
+
+## Update Webhook Endpoint
+
+```bash cURL
+curl -X PATCH "https://api.polar.sh/v1/webhooks/endpoints/{id}" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "events": [
+      "checkout.confirmed",
+      "subscription.created",
+      "subscription.updated",
+      "order.created"
+    ]
+  }'
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Webhook endpoint ID
+</ParamField>
+
+### Request Body
+
+<ParamField body="url" type="string">
+  Update webhook URL
+</ParamField>
+
+<ParamField body="events" type="array">
+  Update subscribed events
+</ParamField>
+
+---
+
+## Delete Webhook Endpoint
+
+```bash cURL
+curl -X DELETE "https://api.polar.sh/v1/webhooks/endpoints/{id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Webhook endpoint ID
+</ParamField>
+
+---
+
+## List Deliveries
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/webhooks/endpoints/{id}/deliveries" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+View delivery history for a webhook endpoint.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Webhook endpoint ID
+</ParamField>
+
+### Query Parameters
+
+<ParamField query="succeeded" type="boolean">
+  Filter by delivery status
+</ParamField>
+
+<ParamField query="start_timestamp" type="string">
+  Filter deliveries after this timestamp
+</ParamField>
+
+<ParamField query="end_timestamp" type="string">
+  Filter deliveries before this timestamp
+</ParamField>
+
+---
+
+## Redeliver Webhook
+
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/webhooks/deliveries/{id}/redeliver" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+Retry a failed webhook delivery.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Delivery ID
+</ParamField>
+
+---
+
+## Event Types
+
+### Checkout Events
+
+<ResponseField name="checkout.created">
+  A new checkout session was created
+</ResponseField>
+
+<ResponseField name="checkout.updated">
+  A checkout session was updated
+</ResponseField>
+
+<ResponseField name="checkout.confirmed">
+  A checkout was confirmed and payment succeeded
+</ResponseField>
+
+### Order Events
+
+<ResponseField name="order.created">
+  A new order was created
+</ResponseField>
+
+<ResponseField name="order.updated">
+  An order was updated
+</ResponseField>
+
+### Subscription Events
+
+<ResponseField name="subscription.created">
+  A new subscription was created
+</ResponseField>
+
+<ResponseField name="subscription.updated">
+  A subscription was updated
+</ResponseField>
+
+<ResponseField name="subscription.canceled">
+  A subscription was canceled
+</ResponseField>
+
+<ResponseField name="subscription.revoked">
+  A subscription was revoked
+</ResponseField>
+
+### Customer Events
+
+<ResponseField name="customer.created">
+  A new customer was created
+</ResponseField>
+
+<ResponseField name="customer.updated">
+  A customer was updated
+</ResponseField>
+
+### Benefit Events
+
+<ResponseField name="benefit_grant.created">
+  A benefit was granted to a customer
+</ResponseField>
+
+<ResponseField name="benefit_grant.revoked">
+  A benefit was revoked from a customer
+</ResponseField>
+
+---
+
+## Webhook Payload
+
+All webhooks include:
+
+```json
+{
+  "type": "checkout.confirmed",
+  "data": {
+    // Event-specific data
+  },
+  "timestamp": "2024-01-15T10:30:00Z",
+  "id": "evt_123"
+}
+```
+
+---
+
+## Signature Verification
+
+Verify webhook authenticity using the `Polar-Signature` header:
+
+```python
+import hmac
+import hashlib
+
+def verify_webhook(payload: bytes, signature: str, secret: str) -> bool:
+    expected = hmac.new(
+        secret.encode(),
+        payload,
+        hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(signature, expected)
+```
+
+```typescript
+import crypto from 'crypto';
+
+function verifyWebhook(
+  payload: string,
+  signature: string,
+  secret: string
+): boolean {
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(payload)
+    .digest('hex');
+  
+  return crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expected)
+  );
+}
+```
+
+---
+
+## Examples
+
+### Create Webhook for All Events
+
+```bash
+curl -X POST "https://api.polar.sh/v1/webhooks/endpoints" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://myapp.com/webhooks/polar",
+    "events": [
+      "checkout.confirmed",
+      "order.created",
+      "subscription.created",
+      "subscription.updated",
+      "subscription.canceled",
+      "customer.created"
+    ],
+    "organization_id": "org_xyz"
+  }'
+```
+
+### Handle Webhook in Express.js
+
+```typescript
+app.post('/webhooks/polar', express.raw({ type: 'application/json' }), (req, res) => {
+  const signature = req.headers['polar-signature'] as string;
+  const payload = req.body;
+  
+  if (!verifyWebhook(payload.toString(), signature, WEBHOOK_SECRET)) {
+    return res.status(401).send('Invalid signature');
+  }
+  
+  const event = JSON.parse(payload.toString());
+  
+  switch (event.type) {
+    case 'checkout.confirmed':
+      // Handle confirmed checkout
+      break;
+    case 'subscription.created':
+      // Handle new subscription
+      break;
+  }
+  
+  res.sendStatus(200);
+});
+```

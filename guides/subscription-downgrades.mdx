@@ -1,0 +1,474 @@
+---
+title: 'Subscription Downgrades'
+description: 'Handle subscription plan downgrades and cancellations with proper billing management'
+---
+
+This guide covers implementing subscription downgrades, managing billing transitions, and handling subscription cancellations.
+
+## Overview
+
+Downgrade strategies:
+1. **Immediate**: Switch plans now, credit unused time
+2. **At Period End**: Switch when current billing period ends (recommended)
+3. **Cancel**: End subscription entirely
+
+## Downgrade at Period End
+
+The recommended approach - switch plans when the current period ends:
+
+```typescript
+const subscription = await polar.subscriptions.update(
+  subscriptionId,
+  {
+    productId: 'prod_basic_...',
+    // Downgrade takes effect at period end
+  }
+)
+
+console.log('Downgrades on:', subscription.currentPeriodEnd)
+```
+
+**Workflow:**
+1. Customer requests downgrade
+2. Current plan continues until period ends
+3. Next billing uses new (lower) price
+4. No refunds or prorations
+
+## Implementation
+
+### Next.js Example
+
+Create a downgrade flow with confirmation:
+
+```typescript
+// app/actions/subscription.ts
+'use server'
+
+import { polar } from '@/lib/polar'
+import { revalidatePath } from 'next/cache'
+
+export async function downgradeSubscription(
+  subscriptionId: string,
+  newProductId: string
+) {
+  try {
+    const subscription = await polar.subscriptions.update(
+      subscriptionId,
+      { productId: newProductId }
+    )
+    
+    revalidatePath('/dashboard/subscriptions')
+    
+    return { 
+      success: true, 
+      subscription,
+      message: `Downgrade scheduled for ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}`
+    }
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error.message 
+    }
+  }
+}
+```
+
+Downgrade page component:
+
+```typescript
+// app/dashboard/subscriptions/[id]/downgrade/page.tsx
+'use client'
+
+import { downgradeSubscription } from '@/app/actions/subscription'
+import { useState } from 'react'
+
+interface DowngradePageProps {
+  subscription: Subscription
+  products: Product[]
+}
+
+export default function DowngradePage({ 
+  subscription, 
+  products 
+}: DowngradePageProps) {
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+
+  async function handleDowngrade(productId: string) {
+    const confirmed = confirm(
+      'Your current plan will remain active until ' +
+      new Date(subscription.currentPeriodEnd).toLocaleDateString() +
+      '. Continue?'
+    )
+    
+    if (!confirmed) return
+    
+    setLoading(true)
+    const result = await downgradeSubscription(subscription.id, productId)
+    
+    if (result.success) {
+      setMessage(result.message)
+    } else {
+      alert(result.error)
+    }
+    
+    setLoading(false)
+  }
+
+  const lowerTierProducts = products.filter(
+    p => p.prices[0].amount < subscription.amount
+  )
+
+  return (
+    <div className="p-8">
+      <h1 className="text-3xl font-bold mb-4">Downgrade Subscription</h1>
+      
+      {message && (
+        <div className="bg-green-50 text-green-600 p-4 rounded-lg mb-6">
+          {message}
+        </div>
+      )}
+
+      <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+        <p className="text-sm text-yellow-700">
+          <strong>Note:</strong> You'll continue to have access to your current plan 
+          until {new Date(subscription.currentPeriodEnd).toLocaleDateString()}. 
+          After that, you'll be switched to the new plan.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {lowerTierProducts.map((product) => {
+          const price = product.prices[0]
+          const monthlySavings = subscription.amount - price.amount
+
+          return (
+            <div key={product.id} className="border rounded-lg p-6">
+              <h2 className="text-2xl font-bold mb-2">{product.name}</h2>
+              <p className="text-gray-600 mb-4">{product.description}</p>
+              
+              <div className="mb-4">
+                <div className="text-3xl font-bold">
+                  ${price.amount / 100}
+                  <span className="text-sm text-gray-500">/{price.recurringInterval}</span>
+                </div>
+                <p className="text-sm text-green-600">
+                  Save ${monthlySavings / 100}/{price.recurringInterval}
+                </p>
+              </div>
+
+              <button
+                onClick={() => handleDowngrade(product.id)}
+                disabled={loading}
+                className="w-full bg-gray-600 text-white py-2 rounded-lg hover:bg-gray-700 disabled:opacity-50"
+              >
+                {loading ? 'Processing...' : 'Downgrade to This Plan'}
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+```
+
+### Laravel Example
+
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\PolarSubscription;
+use Illuminate\Http\Request;
+use Polar\Polar;
+
+class SubscriptionDowngradeController extends Controller
+{
+    public function __construct(
+        private Polar $polar
+    ) {}
+
+    public function downgrade(
+        Request $request,
+        PolarSubscription $subscription
+    ) {
+        $request->validate([
+            'product_id' => 'required|string',
+        ]);
+
+        try {
+            $updated = $this->polar->subscriptions->update(
+                $subscription->polar_subscription_id,
+                productId: $request->product_id
+            );
+
+            $subscription->update([
+                'polar_product_id' => $updated->productId,
+                // Don't update amount yet - it changes at period end
+            ]);
+
+            return redirect()->route('subscriptions.show', $subscription)
+                ->with('success', 
+                    'Downgrade scheduled for ' . 
+                    $updated->currentPeriodEnd->format('M j, Y')
+                );
+        } catch (\Exception $e) {
+            return back()->with('error', 'Downgrade failed: ' . $e->getMessage());
+        }
+    }
+}
+```
+
+## Subscription Cancellation
+
+Cancel a subscription entirely:
+
+```typescript
+// Cancel at period end (recommended)
+const subscription = await polar.subscriptions.update(
+  subscriptionId,
+  {
+    cancelAtPeriodEnd: true,
+    cancellationReason: 'too_expensive',
+    cancellationComment: 'Moving to a different solution',
+  }
+)
+```
+
+### Cancellation Reasons
+
+Track why customers cancel:
+
+- `too_expensive`: Too expensive
+- `missing_features`: Missing features
+- `switched_service`: Switched to competitor
+- `unused`: Not using enough
+- `customer_service`: Poor support
+- `low_quality`: Quality issues
+- `too_complex`: Too complicated
+- `other`: Other reasons
+
+### Cancel Immediately
+
+For immediate cancellation:
+
+```typescript
+const subscription = await polar.subscriptions.delete(subscriptionId)
+```
+
+<Warning>
+  Immediate cancellation revokes access instantly. Use cancel-at-period-end for better UX.
+</Warning>
+
+## Cancellation Flow
+
+<Steps>
+  <Step title="Show cancellation form">
+    ```typescript
+    <form onSubmit={handleCancel}>
+      <label>
+        Why are you canceling?
+        <select name="reason">
+          <option value="too_expensive">Too expensive</option>
+          <option value="missing_features">Missing features</option>
+          <option value="switched_service">Switching providers</option>
+          <option value="other">Other</option>
+        </select>
+      </label>
+      
+      <label>
+        Additional feedback (optional):
+        <textarea name="comment" />
+      </label>
+      
+      <button type="submit">Cancel Subscription</button>
+    </form>
+    ```
+  </Step>
+  
+  <Step title="Process cancellation">
+    ```typescript
+    const result = await polar.subscriptions.update(subscriptionId, {
+      cancelAtPeriodEnd: true,
+      cancellationReason: formData.reason,
+      cancellationComment: formData.comment,
+    })
+    ```
+  </Step>
+  
+  <Step title="Show confirmation">
+    ```typescript
+    <div>
+      <h2>Subscription Canceled</h2>
+      <p>
+        You'll have access until {result.currentPeriodEnd}
+      </p>
+      <button onClick={reactivate}>Undo Cancellation</button>
+    </div>
+    ```
+  </Step>
+</Steps>
+
+## Reactivate Canceled Subscription
+
+Undo a cancellation before it takes effect:
+
+```typescript
+const subscription = await polar.subscriptions.update(
+  subscriptionId,
+  {
+    cancelAtPeriodEnd: false, // Reactivate
+  }
+)
+```
+
+## Webhook Handling
+
+Handle cancellation events:
+
+```typescript
+app.post('/webhooks/polar', (req, res) => {
+  const event = polar.webhooks.verifyEvent(...)
+  
+  switch (event.type) {
+    case 'subscription.canceled':
+      // Subscription will cancel at period end
+      await scheduleAccessRevocation(
+        event.data.id,
+        event.data.currentPeriodEnd
+      )
+      
+      // Send cancellation confirmation
+      await sendEmail(event.data.customer.email, {
+        subject: 'Subscription Cancellation Confirmed',
+        data: { 
+          endsAt: event.data.currentPeriodEnd 
+        },
+      })
+      break
+    
+    case 'subscription.revoked':
+      // Subscription ended, revoke access immediately
+      await revokeAccess(event.data.customerId)
+      break
+    
+    case 'subscription.uncanceled':
+      // Customer reactivated
+      await cancelScheduledRevocation(event.data.id)
+      break
+  }
+  
+  res.json({ received: true })
+})
+```
+
+## Retention Strategies
+
+Implement retention offers before cancellation:
+
+```typescript
+function RetentionOffer({ onAccept, onDecline }) {
+  return (
+    <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+      <h3 className="text-xl font-bold mb-2">Wait! Special Offer</h3>
+      <p className="mb-4">
+        Get 50% off your next 3 months if you stay.
+      </p>
+      <div className="flex gap-4">
+        <button 
+          onClick={onAccept}
+          className="bg-blue-600 text-white px-6 py-2 rounded-lg"
+        >
+          Accept Offer
+        </button>
+        <button 
+          onClick={onDecline}
+          className="text-gray-600"
+        >
+          No Thanks, Cancel Anyway
+        </button>
+      </div>
+    </div>
+  )
+}
+```
+
+Apply discount:
+
+```typescript
+async function applyRetentionDiscount(subscriptionId: string) {
+  // Create retention discount
+  const discount = await polar.discounts.create({
+    name: 'Retention - 50% off 3 months',
+    percentOff: 50,
+    duration: 'repeating',
+    durationInMonths: 3,
+  })
+  
+  // Apply to subscription
+  await polar.subscriptions.update(subscriptionId, {
+    discountId: discount.id,
+  })
+}
+```
+
+## Testing
+
+Test downgrade and cancellation flows:
+
+```typescript
+// Test downgrade
+await polar.subscriptions.update(testSubscriptionId, {
+  productId: 'prod_basic_test_...',
+})
+
+// Test cancel
+await polar.subscriptions.update(testSubscriptionId, {
+  cancelAtPeriodEnd: true,
+  cancellationReason: 'other',
+})
+
+// Test reactivate
+await polar.subscriptions.update(testSubscriptionId, {
+  cancelAtPeriodEnd: false,
+})
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="User Experience">
+    - Clearly communicate when changes take effect
+    - Allow easy reactivation
+    - Collect cancellation feedback
+    - Offer retention incentives
+    - Send confirmation emails
+  </Accordion>
+  
+  <Accordion title="Business Operations">
+    - Track cancellation reasons
+    - Monitor cancellation rates
+    - Analyze feedback for improvements
+    - Implement win-back campaigns
+  </Accordion>
+  
+  <Accordion title="Technical">
+    - Use webhooks for access control
+    - Handle partial period refunds
+    - Log all subscription changes
+    - Test edge cases thoroughly
+  </Accordion>
+</AccordionGroup>
+
+## Related Guides
+
+<CardGroup cols={2}>
+  <Card title="Subscription Upgrades" icon="arrow-up" href="/guides/subscription-upgrades">
+    Handle plan upgrades
+  </Card>
+  <Card title="Customer Portal" icon="user" href="/api-reference/customer-portal/overview">
+    Let customers self-serve
+  </Card>
+</CardGroup>

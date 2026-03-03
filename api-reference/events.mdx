@@ -1,0 +1,303 @@
+---
+title: Events
+description: Ingest and query usage events for metered billing
+---
+
+## Overview
+
+Events track customer usage for metered billing. Send events to Polar as they occur, and they'll be aggregated by meters and billed accordingly.
+
+## The Event Object
+
+<ResponseField name="id" type="string" required>
+  Unique identifier
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Event name
+</ResponseField>
+
+<ResponseField name="customer_id" type="string" required>
+  Customer ID
+</ResponseField>
+
+<ResponseField name="timestamp" type="string" required>
+  When the event occurred (ISO 8601)
+</ResponseField>
+
+<ResponseField name="properties" type="object" required>
+  Event properties (key-value pairs)
+</ResponseField>
+
+<ResponseField name="source" type="enum" required>
+  Source: `api` or `import`
+</ResponseField>
+
+<ResponseField name="organization_id" type="string" required>
+  Organization ID
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  When event was ingested
+</ResponseField>
+
+---
+
+## Ingest Events
+
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/events/ingest" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "events": [
+      {
+        "name": "api_request",
+        "customer_id": "cust_123",
+        "timestamp": "2024-01-15T10:30:00Z",
+        "properties": {
+          "endpoint": "/api/v1/users",
+          "response_time_ms": 150
+        }
+      }
+    ]
+  }'
+```
+
+<Info>
+  Events are processed asynchronously. They'll be available for querying within a few seconds.
+</Info>
+
+### Request Body
+
+<ParamField body="events" type="array" required>
+  Array of events to ingest (max 100 per request)
+  
+  <Expandable>
+    <ParamField body="name" type="string" required>
+      Event name (alphanumeric, underscores, dots)
+    </ParamField>
+    
+    <ParamField body="customer_id" type="string">
+      Customer ID (use this OR external_customer_id)
+    </ParamField>
+    
+    <ParamField body="external_customer_id" type="string">
+      Your external customer ID
+    </ParamField>
+    
+    <ParamField body="timestamp" type="string" required>
+      Event timestamp (ISO 8601)
+    </ParamField>
+    
+    <ParamField body="properties" type="object" required>
+      Event properties. Use consistent types for each property name.
+    </ParamField>
+    
+    <ParamField body="idempotency_key" type="string">
+      Unique key to prevent duplicate ingestion
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Response
+
+<ResponseField name="ingested" type="integer">
+  Number of events successfully ingested
+</ResponseField>
+
+<ResponseField name="errors" type="array">
+  Array of errors for failed events
+</ResponseField>
+
+---
+
+## List Events
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/events" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Query Parameters
+
+<ParamField query="organization_id" type="string">
+  Filter by organization
+</ParamField>
+
+<ParamField query="customer_id" type="string">
+  Filter by customer
+</ParamField>
+
+<ParamField query="external_customer_id" type="string">
+  Filter by external customer ID
+</ParamField>
+
+<ParamField query="meter_id" type="string">
+  Filter events matching a meter's filter
+</ParamField>
+
+<ParamField query="name" type="string">
+  Filter by event name
+</ParamField>
+
+<ParamField query="filter" type="string">
+  JSON filter clause (same format as meter filters)
+</ParamField>
+
+<ParamField query="start_timestamp" type="string">
+  Filter events after this timestamp
+</ParamField>
+
+<ParamField query="end_timestamp" type="string">
+  Filter events before this timestamp
+</ParamField>
+
+<ParamField query="metadata" type="object">
+  Filter by metadata
+</ParamField>
+
+---
+
+## Get Event
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/events/{id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Event ID
+</ParamField>
+
+---
+
+## Get Event Statistics
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/events/statistics" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json"
+```
+
+Get aggregated statistics for events over time.
+
+### Query Parameters
+
+<ParamField query="organization_id" type="string" required>
+  Organization ID
+</ParamField>
+
+<ParamField query="start_timestamp" type="string" required>
+  Start of time range
+</ParamField>
+
+<ParamField query="end_timestamp" type="string" required>
+  End of time range
+</ParamField>
+
+<ParamField query="interval" type="enum" required>
+  Time interval: `hour`, `day`, `week`, or `month`
+</ParamField>
+
+<ParamField query="meter_id" type="string">
+  Aggregate events for specific meter
+</ParamField>
+
+<ParamField query="aggregation" type="enum">
+  Aggregation function: `count`, `sum`, `avg`, `min`, or `max`
+</ParamField>
+
+<ParamField query="aggregate_field" type="string">
+  Property to aggregate (for sum/avg/min/max)
+</ParamField>
+
+### Response
+
+Returns time series data:
+
+```json
+[
+  {
+    "timestamp": "2024-01-15T00:00:00Z",
+    "value": 1234
+  },
+  {
+    "timestamp": "2024-01-16T00:00:00Z",
+    "value": 2345
+  }
+]
+```
+
+---
+
+## Examples
+
+### Ingest Single Event
+
+```bash
+curl -X POST "https://api.polar.sh/v1/events/ingest" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "events": [
+      {
+        "name": "api_request",
+        "external_customer_id": "user_123",
+        "timestamp": "2024-01-15T10:30:00Z",
+        "properties": {
+          "method": "POST",
+          "endpoint": "/api/v1/data",
+          "bytes_sent": 2048
+        },
+        "idempotency_key": "req_abc123"
+      }
+    ]
+  }'
+```
+
+### Ingest Batch of Events
+
+```bash
+curl -X POST "https://api.polar.sh/v1/events/ingest" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "events": [
+      {
+        "name": "api_request",
+        "customer_id": "cust_123",
+        "timestamp": "2024-01-15T10:30:00Z",
+        "properties": {"endpoint": "/api/users", "count": 1}
+      },
+      {
+        "name": "api_request",
+        "customer_id": "cust_123",
+        "timestamp": "2024-01-15T10:31:00Z",
+        "properties": {"endpoint": "/api/posts", "count": 1}
+      },
+      {
+        "name": "data_processed",
+        "customer_id": "cust_123",
+        "timestamp": "2024-01-15T10:32:00Z",
+        "properties": {"bytes": 10485760, "rows": 5000}
+      }
+    ]
+  }'
+```
+
+### Query Events for Customer
+
+```bash
+curl -X GET "https://api.polar.sh/v1/events?customer_id=cust_123&start_timestamp=2024-01-01T00:00:00Z&end_timestamp=2024-01-31T23:59:59Z" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Get Daily Statistics
+
+```bash
+curl -X GET "https://api.polar.sh/v1/events/statistics?organization_id=org_123&start_timestamp=2024-01-01T00:00:00Z&end_timestamp=2024-01-31T23:59:59Z&interval=day&aggregation=count" \
+  -H "Authorization: Bearer polar_pat_..."
+```

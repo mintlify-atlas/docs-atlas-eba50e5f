@@ -1,0 +1,430 @@
+---
+title: 'Orders'
+description: 'Access order history, invoices, and manage payment retries'
+---
+
+The Orders API provides customers with access to their purchase history, invoice downloads, and payment retry functionality for failed orders.
+
+## List Orders
+
+Retrieve all orders for the authenticated customer.
+
+```bash
+GET /v1/customer-portal/orders
+```
+
+### Query Parameters
+
+<ParamField query="product_id" type="string[]">
+  Filter by product ID(s).
+</ParamField>
+
+<ParamField query="product_billing_type" type="string[]">
+  Filter by billing type: `recurring` (subscription charges) or `one_time` (one-time purchases).
+</ParamField>
+
+<ParamField query="subscription_id" type="string[]">
+  Filter by subscription ID(s).
+</ParamField>
+
+<ParamField query="query" type="string">
+  Search by product or organization name.
+</ParamField>
+
+<ParamField query="limit" type="number" default="10">
+  Number of results per page (max 100).
+</ParamField>
+
+<ParamField query="page" type="number" default="1">
+  Page number for pagination.
+</ParamField>
+
+### Response
+
+<ResponseField name="items" type="Order[]">
+  Array of order objects.
+</ResponseField>
+
+<ResponseField name="pagination" type="object">
+  Pagination metadata.
+</ResponseField>
+
+### Example
+
+```bash
+curl https://api.polar.sh/v1/customer-portal/orders?product_billing_type=one_time \
+  -H "Authorization: Bearer polar_cst_..."
+```
+
+**Response:**
+```json
+{
+  "items": [
+    {
+      "id": "order_abc123",
+      "created_at": "2024-01-15T10:30:00Z",
+      "amount": 9900,
+      "currency": "USD",
+      "status": "succeeded",
+      "billing_reason": "purchase",
+      "description": "Premium Template Pack",
+      "product": {
+        "id": "prod_xyz",
+        "name": "Premium Template Pack",
+        "organization": {
+          "name": "Design Co",
+          "slug": "designco"
+        }
+      },
+      "subscription": null,
+      "items": [
+        {
+          "product_id": "prod_xyz",
+          "product_price_id": "price_123",
+          "description": "Premium Template Pack",
+          "amount": 9900,
+          "quantity": 1
+        }
+      ],
+      "next_payment_attempt_at": null
+    }
+  ],
+  "pagination": {
+    "total_count": 12,
+    "page": 1
+  }
+}
+```
+
+## Get Order
+
+Retrieve details for a specific order.
+
+```bash
+GET /v1/customer-portal/orders/{id}
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The order ID.
+</ParamField>
+
+### Response
+
+Returns a full order object including line items, product details, and payment status.
+
+### Example
+
+```bash
+curl https://api.polar.sh/v1/customer-portal/orders/order_abc123 \
+  -H "Authorization: Bearer polar_cst_..."
+```
+
+## Update Order
+
+Update editable order details like billing address.
+
+```bash
+PATCH /v1/customer-portal/orders/{id}
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The order ID.
+</ParamField>
+
+### Request Body
+
+<ParamField body="billing_address" type="object">
+  Updated billing address with `line1`, `line2`, `city`, `state`, `postal_code`, and `country` fields.
+</ParamField>
+
+<ParamField body="billing_name" type="string">
+  Name on the billing address.
+</ParamField>
+
+<ParamField body="tax_id" type="string">
+  Tax ID number for the order.
+</ParamField>
+
+### Example
+
+```bash
+curl -X PATCH https://api.polar.sh/v1/customer-portal/orders/order_abc123 \
+  -H "Authorization: Bearer polar_cst_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "billing_name": "Acme Corporation",
+    "billing_address": {
+      "line1": "123 Business St",
+      "city": "San Francisco",
+      "state": "CA",
+      "postal_code": "94105",
+      "country": "US"
+    },
+    "tax_id": "US123456789"
+  }'
+```
+
+## Get Order Invoice
+
+Retrieve invoice data for a paid order.
+
+```bash
+GET /v1/customer-portal/orders/{id}/invoice
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The order ID.
+</ParamField>
+
+### Response
+
+<ResponseField name="url" type="string">
+  URL to download the invoice PDF.
+</ResponseField>
+
+### Example
+
+```bash
+curl https://api.polar.sh/v1/customer-portal/orders/order_abc123/invoice \
+  -H "Authorization: Bearer polar_cst_..."
+```
+
+**Response:**
+```json
+{
+  "url": "https://files.polar.sh/invoices/inv_xyz123.pdf"
+}
+```
+
+<Note>
+  Invoices are only available for paid orders with complete billing information.
+</Note>
+
+## Generate Invoice
+
+Trigger invoice generation for an order that's been paid but hasn't had an invoice created yet.
+
+```bash
+POST /v1/customer-portal/orders/{id}/invoice
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The order ID.
+</ParamField>
+
+### Response
+
+Returns 202 Accepted. The invoice will be generated asynchronously.
+
+### Example
+
+```bash
+curl -X POST https://api.polar.sh/v1/customer-portal/orders/order_abc123/invoice \
+  -H "Authorization: Bearer polar_cst_..."
+```
+
+### Error Cases
+
+Returns 422 if:
+- Order is not paid
+- Missing billing name or address
+
+```json
+{
+  "error": "missing_invoice_billing_details",
+  "detail": "Order must have billing name and address to generate invoice"
+}
+```
+
+## Get Payment Status
+
+Check the current payment status for an order.
+
+```bash
+GET /v1/customer-portal/orders/{id}/payment-status
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The order ID.
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Payment status: `succeeded`, `processing`, `requires_action`, `failed`, or `no_payment`.
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if payment failed.
+</ResponseField>
+
+### Example
+
+```bash
+curl https://api.polar.sh/v1/customer-portal/orders/order_abc123/payment-status \
+  -H "Authorization: Bearer polar_cst_..."
+```
+
+**Success:**
+```json
+{
+  "status": "succeeded",
+  "error": null
+}
+```
+
+**Failed:**
+```json
+{
+  "status": "failed",
+  "error": "Your card was declined"
+}
+```
+
+## Confirm Retry Payment
+
+Retry payment for a failed order using a new or saved payment method.
+
+```bash
+POST /v1/customer-portal/orders/{id}/confirm-payment
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  The order ID.
+</ParamField>
+
+### Request Body
+
+Provide either a new payment confirmation token or an existing payment method ID:
+
+<ParamField body="confirmation_token_id" type="string">
+  Stripe confirmation token ID for a new payment method.
+</ParamField>
+
+<ParamField body="payment_method_id" type="string">
+  ID of a saved payment method from the customer's account.
+</ParamField>
+
+<ParamField body="payment_processor" type="string" default="stripe">
+  Payment processor: currently only `stripe` is supported.
+</ParamField>
+
+<Note>
+  You must provide exactly one of `confirmation_token_id` or `payment_method_id`, not both.
+</Note>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Payment confirmation status: `succeeded`, `requires_action`, or `failed`.
+</ResponseField>
+
+<ResponseField name="client_secret" type="string">
+  Client secret if additional authentication is required (3D Secure).
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if payment failed.
+</ResponseField>
+
+### Examples
+
+**With New Payment Method:**
+```bash
+curl -X POST https://api.polar.sh/v1/customer-portal/orders/order_abc123/confirm-payment \
+  -H "Authorization: Bearer polar_cst_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "confirmation_token_id": "ctoken_xyz",
+    "payment_processor": "stripe"
+  }'
+```
+
+**With Saved Payment Method:**
+```bash
+curl -X POST https://api.polar.sh/v1/customer-portal/orders/order_abc123/confirm-payment \
+  -H "Authorization: Bearer polar_cst_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "payment_method_id": "pm_abc123",
+    "payment_processor": "stripe"
+  }'
+```
+
+**Successful Response:**
+```json
+{
+  "status": "succeeded",
+  "client_secret": null,
+  "error": null
+}
+```
+
+**Requires Additional Action:**
+```json
+{
+  "status": "requires_action",
+  "client_secret": "pi_secret_xyz",
+  "error": null
+}
+```
+
+### Error Cases
+
+**Not Eligible for Retry (422):**
+```json
+{
+  "error": "order_not_eligible_for_retry",
+  "detail": "This order cannot be retried"
+}
+```
+
+**Payment Already in Progress (409):**
+```json
+{
+  "error": "payment_already_in_progress",
+  "detail": "A payment attempt is currently in progress for this order"
+}
+```
+
+## Order States
+
+Orders can be in the following states:
+
+- **succeeded**: Payment completed successfully
+- **processing**: Payment is being processed
+- **requires_action**: Customer action needed (e.g., 3D Secure)
+- **failed**: Payment failed and may be eligible for retry
+- **canceled**: Order was canceled
+
+## Permissions
+
+Order operations require billing permissions:
+
+- **List/Get/Invoice**: Any authenticated customer or member with billing access
+- **Update/Payment**: Customer or member with `billing_manager` or `owner` role
+
+## Next Payment Attempt
+
+For failed subscription renewal orders, the `next_payment_attempt_at` field indicates when the automatic retry is scheduled:
+
+```json
+{
+  "status": "failed",
+  "next_payment_attempt_at": "2024-01-20T10:00:00Z"
+}
+```
+
+Customers can manually retry before this time using the confirm payment endpoint.

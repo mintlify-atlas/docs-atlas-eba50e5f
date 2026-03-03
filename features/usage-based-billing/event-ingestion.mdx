@@ -1,0 +1,580 @@
+---
+title: "Event Ingestion"
+description: "Send usage events to Polar for metered billing"
+---
+
+Events are the foundation of usage-based billing. Every billable action in your application should generate an event that's sent to Polar for tracking and aggregation.
+
+## Event Structure
+
+Each event contains:
+
+- **name**: Type of event (required)
+- **customer_id** or **external_customer_id**: Customer identifier (required)
+- **timestamp**: When the event occurred (defaults to current time)
+- **metadata**: Additional data for filtering and aggregation
+- **external_id**: Your unique identifier for deduplication
+- **parent_id**: Link child events to parent events
+- **member_id** or **external_member_id**: For B2B attribution
+
+## Creating Events
+
+### Basic Event
+
+The simplest event just needs a name and customer:
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/events/ingest" \
+  -H "Authorization: Bearer polar_at_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "events": [
+      {
+        "name": "api.request",
+        "customer_id": "01234567-89ab-cdef-0123-456789abcdef"
+      }
+    ]
+  }'
+```
+
+```python Python
+from polar_sdk import Polar
+
+client = Polar(access_token="polar_at_...")
+
+result = client.events.ingest(
+    events=[
+        {
+            "name": "api.request",
+            "customer_id": "01234567-89ab-cdef-0123-456789abcdef",
+        }
+    ]
+)
+
+print(f"Inserted {result.inserted} events")
+```
+
+```typescript TypeScript
+import { Polar } from "@polar-sh/sdk";
+
+const client = new Polar({
+  accessToken: "polar_at_...",
+});
+
+const result = await client.events.ingest({
+  events: [
+    {
+      name: "api.request",
+      customerId: "01234567-89ab-cdef-0123-456789abcdef",
+    },
+  ],
+});
+
+console.log(`Inserted ${result.inserted} events`);
+```
+</CodeGroup>
+
+### Event with Metadata
+
+Add metadata for filtering and aggregation:
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/events/ingest" \
+  -H "Authorization: Bearer polar_at_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "events": [
+      {
+        "name": "api.request",
+        "customer_id": "01234567-89ab-cdef-0123-456789abcdef",
+        "metadata": {
+          "endpoint": "/v1/chat/completions",
+          "model": "gpt-4",
+          "input_tokens": 100,
+          "output_tokens": 1150,
+          "total_tokens": 1250
+        }
+      }
+    ]
+  }'
+```
+
+```python Python
+result = client.events.ingest(
+    events=[
+        {
+            "name": "api.request",
+            "customer_id": "01234567-89ab-cdef-0123-456789abcdef",
+            "metadata": {
+                "endpoint": "/v1/chat/completions",
+                "model": "gpt-4",
+                "input_tokens": 100,
+                "output_tokens": 1150,
+                "total_tokens": 1250,
+            },
+        }
+    ]
+)
+```
+
+```typescript TypeScript
+const result = await client.events.ingest({
+  events: [
+    {
+      name: "api.request",
+      customerId: "01234567-89ab-cdef-0123-456789abcdef",
+      metadata: {
+        endpoint: "/v1/chat/completions",
+        model: "gpt-4",
+        input_tokens: 100,
+        output_tokens: 1150,
+        total_tokens: 1250,
+      },
+    },
+  ],
+});
+```
+</CodeGroup>
+
+## Special Metadata Fields
+
+### Cost Tracking
+
+Track costs using the `_cost` metadata field:
+
+```json
+{
+  "name": "llm.request",
+  "customer_id": "01234567-89ab-cdef-0123-456789abcdef",
+  "metadata": {
+    "_cost": {
+      "amount": 0.0125,
+      "currency": "usd"
+    }
+  }
+}
+```
+
+The `_cost.amount` is in dollars (not cents).
+
+### LLM Tracking
+
+For AI/LLM applications, use the `_llm` metadata field:
+
+```json
+{
+  "name": "llm.completion",
+  "customer_id": "01234567-89ab-cdef-0123-456789abcdef",
+  "metadata": {
+    "_llm": {
+      "vendor": "openai",
+      "model": "gpt-4-turbo",
+      "prompt": "Summarize this document...",
+      "response": "This document discusses...",
+      "input_tokens": 2500,
+      "cached_input_tokens": 1000,
+      "output_tokens": 500,
+      "total_tokens": 3000
+    }
+  }
+}
+```
+
+## Customer Identification
+
+### Using Polar Customer ID
+
+If you store Polar's customer ID:
+
+```json
+{
+  "name": "api.request",
+  "customer_id": "01234567-89ab-cdef-0123-456789abcdef"
+}
+```
+
+### Using External Customer ID
+
+If you use your own customer IDs:
+
+```json
+{
+  "name": "api.request",
+  "external_customer_id": "customer_12345"
+}
+```
+
+Polar will automatically map this to the corresponding Polar customer.
+
+## Member Attribution (B2B)
+
+For B2B SaaS, track which team member performed the action:
+
+```json
+{
+  "name": "api.request",
+  "customer_id": "01234567-89ab-cdef-0123-456789abcdef",
+  "member_id": "01234567-89ab-cdef-0123-456789abcdef",
+  "metadata": {
+    "endpoint": "/v1/projects"
+  }
+}
+```
+
+Or with your own member IDs:
+
+```json
+{
+  "name": "api.request",
+  "external_customer_id": "company_xyz",
+  "external_member_id": "[email protected]",
+  "metadata": {
+    "endpoint": "/v1/projects"
+  }
+}
+```
+
+## Advanced Features
+
+### Deduplication
+
+Use `external_id` to prevent duplicate events:
+
+```json
+{
+  "name": "api.request",
+  "customer_id": "01234567-89ab-cdef-0123-456789abcdef",
+  "external_id": "req_abc123xyz",
+  "metadata": {
+    "tokens": 1250
+  }
+}
+```
+
+If you send this event twice, only the first one will be stored. The response will indicate duplicates:
+
+```json
+{
+  "inserted": 1,
+  "duplicates": 1
+}
+```
+
+### Custom Timestamps
+
+By default, events use the current time. For historical events or delayed reporting:
+
+```json
+{
+  "name": "api.request",
+  "customer_id": "01234567-89ab-cdef-0123-456789abcdef",
+  "timestamp": "2024-03-01T15:30:00Z"
+}
+```
+
+<Warning>
+  Timestamps must be in the past. Future timestamps will be rejected.
+</Warning>
+
+### Parent-Child Relationships
+
+Create hierarchical event structures for complex workflows:
+
+```json
+{
+  "events": [
+    {
+      "name": "batch.job",
+      "customer_id": "01234567-89ab-cdef-0123-456789abcdef",
+      "external_id": "job_123",
+      "metadata": {
+        "total_items": 100
+      }
+    },
+    {
+      "name": "batch.item",
+      "customer_id": "01234567-89ab-cdef-0123-456789abcdef",
+      "parent_id": "job_123",
+      "metadata": {
+        "item_id": 1,
+        "processing_time_ms": 250
+      }
+    },
+    {
+      "name": "batch.item",
+      "customer_id": "01234567-89ab-cdef-0123-456789abcdef",
+      "parent_id": "job_123",
+      "metadata": {
+        "item_id": 2,
+        "processing_time_ms": 180
+      }
+    }
+  ]
+}
+```
+
+You can use either:
+- Polar event IDs (UUID): `"parent_id": "01234567-89ab-cdef-0123-456789abcdef"`
+- External IDs: `"parent_id": "job_123"`
+
+## Batch Ingestion
+
+Send up to 1,000 events in a single request for better performance:
+
+<CodeGroup>
+```python Python
+events = []
+for i in range(100):
+    events.append({
+        "name": "api.request",
+        "customer_id": customer_id,
+        "metadata": {"request_id": i},
+    })
+
+result = client.events.ingest(events=events)
+print(f"Inserted {result.inserted} events")
+```
+
+```typescript TypeScript
+const events = [];
+for (let i = 0; i < 100; i++) {
+  events.push({
+    name: "api.request",
+    customerId: customerId,
+    metadata: { request_id: i },
+  });
+}
+
+const result = await client.events.ingest({ events });
+console.log(`Inserted ${result.inserted} events`);
+```
+</CodeGroup>
+
+## Organization Context
+
+When using organization access tokens, specify the organization:
+
+```json
+{
+  "events": [
+    {
+      "name": "api.request",
+      "customer_id": "01234567-89ab-cdef-0123-456789abcdef",
+      "organization_id": "01234567-89ab-cdef-0123-456789abcdef"
+    }
+  ]
+}
+```
+
+With personal access tokens, this field is optional if your token has access to only one organization.
+
+## Event Validation
+
+Polar validates events on ingestion:
+
+### Name Validation
+
+- **Required**: Every event must have a name
+- **Length**: Minimum 1 character
+- **Characters**: Any valid UTF-8 string
+
+### Timestamp Validation
+
+- Must be in the past
+- Must be timezone-aware (include timezone information)
+- Automatically converted to UTC
+
+### Metadata Validation
+
+- **Numeric values**: Integers or floats for aggregation
+- **String values**: For filtering
+- **Boolean values**: For filtering
+- **Nested objects**: Use dot notation (e.g., `metadata.user.plan`)
+
+### Customer Validation
+
+- Must provide either `customer_id` or `external_customer_id`
+- Customer must exist in your organization
+- External customer IDs are automatically mapped
+
+## Error Handling
+
+The ingestion API returns:
+
+```json
+{
+  "inserted": 95,
+  "duplicates": 5
+}
+```
+
+- **inserted**: Number of new events stored
+- **duplicates**: Number of events skipped due to duplicate `external_id`
+
+If there are validation errors, you'll receive a 422 response with details:
+
+```json
+{
+  "detail": [
+    {
+      "loc": ["body", "events", 0, "timestamp"],
+      "msg": "Timestamp must be in the past.",
+      "type": "value_error"
+    }
+  ]
+}
+```
+
+## Integration Patterns
+
+### Synchronous (Real-time)
+
+Send events immediately after actions:
+
+```python
+@app.post("/api/chat")
+async def chat(request: ChatRequest, customer_id: str):
+    # Process the chat request
+    response = await llm.complete(request.messages)
+    
+    # Send usage event
+    polar_client.events.ingest(
+        events=[{
+            "name": "llm.completion",
+            "customer_id": customer_id,
+            "metadata": {
+                "model": "gpt-4",
+                "input_tokens": response.usage.prompt_tokens,
+                "output_tokens": response.usage.completion_tokens,
+                "total_tokens": response.usage.total_tokens,
+            },
+        }]
+    )
+    
+    return response
+```
+
+### Asynchronous (Background)
+
+Queue events for batch processing:
+
+```python
+from celery import Celery
+
+celery = Celery('app')
+event_buffer = []
+
+@app.post("/api/chat")
+async def chat(request: ChatRequest, customer_id: str):
+    response = await llm.complete(request.messages)
+    
+    # Add to buffer
+    event_buffer.append({
+        "name": "llm.completion",
+        "customer_id": customer_id,
+        "metadata": {
+            "total_tokens": response.usage.total_tokens,
+        },
+    })
+    
+    # Flush buffer when it reaches threshold
+    if len(event_buffer) >= 100:
+        celery.send_task('flush_events', args=[event_buffer.copy()])
+        event_buffer.clear()
+    
+    return response
+
+@celery.task
+def flush_events(events):
+    polar_client.events.ingest(events=events)
+```
+
+### Periodic Aggregation
+
+For high-volume scenarios, aggregate locally first:
+
+```python
+import redis
+from datetime import datetime
+
+redis_client = redis.Redis()
+
+@app.post("/api/request")
+async def handle_request(customer_id: str):
+    # Increment counter in Redis
+    key = f"usage:{customer_id}:{datetime.utcnow().strftime('%Y-%m-%d-%H')}"
+    redis_client.incr(key)
+    
+    # Process request
+    return {"status": "ok"}
+
+# Cron job runs every hour
+@celery.task
+def report_hourly_usage():
+    pattern = f"usage:*:{datetime.utcnow().strftime('%Y-%m-%d-%H')}"
+    events = []
+    
+    for key in redis_client.scan_iter(match=pattern):
+        parts = key.decode().split(':')
+        customer_id = parts[1]
+        count = int(redis_client.get(key))
+        
+        events.append({
+            "name": "api.requests.hourly",
+            "customer_id": customer_id,
+            "metadata": {"count": count},
+        })
+    
+    if events:
+        polar_client.events.ingest(events=events)
+```
+
+## Best Practices
+
+### Performance
+
+- **Batch events**: Send multiple events per request when possible
+- **Use async**: Don't block your main thread waiting for ingestion
+- **Buffer locally**: Queue events and flush periodically
+- **Set timeouts**: Don't let event ingestion slow your API
+
+### Reliability
+
+- **Handle errors**: Retry failed ingestions with exponential backoff
+- **Use external_id**: Prevent duplicate charges from retries
+- **Monitor ingestion**: Track success/failure rates
+- **Log events**: Keep local logs for debugging
+
+### Data Quality
+
+- **Validate before sending**: Check required fields locally first
+- **Use consistent names**: Establish event naming conventions
+- **Document metadata**: Define what each field means
+- **Test filters**: Verify events match your meter filters
+
+### Privacy & Security
+
+- **Minimize PII**: Don't include unnecessary personal data
+- **Use references**: Send IDs instead of full user details
+- **Secure tokens**: Protect your access tokens
+- **Audit events**: Review what data you're sending
+
+## Limits
+
+- **Batch size**: Maximum 1,000 events per request
+- **Rate limits**: 100 requests per second per organization
+- **Event retention**: Events are retained indefinitely
+- **Metadata size**: No hard limit, but keep reasonable (< 10KB per event)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Meters" icon="gauge" href="/features/usage-based-billing/meters">
+    Configure meters to aggregate your events
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/events">
+    Complete API documentation for event ingestion
+  </Card>
+</CardGroup>

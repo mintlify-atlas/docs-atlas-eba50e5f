@@ -1,0 +1,274 @@
+---
+title: Balance Tracking
+description: Monitor your available balance and transaction history
+---
+
+## Overview
+
+Your Polar balance represents the funds available for payout after all fees have been accounted for. Understanding your balance helps you plan payouts and track revenue.
+
+## Balance Components
+
+### Gross Amount
+
+The total revenue from all successful transactions:
+
+- Product purchases
+- Subscription payments
+- One-time payments
+- License key sales
+
+### Transaction Types
+
+Your balance is affected by several transaction types:
+
+#### Revenue Transactions
+
+- **Order Payments**: Customer purchases
+- **Subscription Payments**: Recurring subscription charges
+- **License Sales**: License key purchases
+
+#### Fee Transactions
+
+- **Platform Fees**: Polar's [platform fees](/merchant-of-record/fees) (4% + 40¢)
+- **Payment Processor Fees**: Stripe's processing fees
+- **Payout Fees**: Fees incurred during payout processing
+
+#### Adjustment Transactions
+
+- **Refunds**: Customer refunds (reverses revenue)
+- **Disputes**: Chargeback disputes
+- **Balance Corrections**: Manual adjustments
+
+## Viewing Your Balance
+
+Access your balance through:
+
+1. **Finance Dashboard**: Real-time balance display
+2. **Account Page**: Per-account balance breakdown
+3. **API**: Programmatic balance queries via `/accounts/{id}`
+
+### Balance Display
+
+```
+Available Balance: $1,234.56
+Credit Balance: $50.00
+Total Available: $1,284.56
+```
+
+## Credit Balance
+
+Your account may have credits from:
+
+- **Campaign Credits**: Promotional fee credits from referral campaigns
+- **Fee Waivers**: Temporary fee reductions
+- **Compensation Credits**: Service credits
+
+Credits automatically apply to platform fees before using your revenue balance.
+
+### Credit Application
+
+When creating a payout:
+
+1. Platform fees calculated
+2. Credits applied first
+3. Remaining fees deducted from balance
+4. Net amount paid out
+
+## Minimum Balance Requirements
+
+Payouts require a minimum balance that varies by currency:
+
+### Common Currencies
+
+- **USD**: $10.00 minimum
+- **EUR**: €13.00 minimum
+- **GBP**: £15.00 minimum
+- **CHF**: CHF 15.00 minimum
+
+### Other Currencies
+
+- **Default**: $10.00 equivalent
+- **High-value currencies**: Higher minimums apply
+
+Refer to `ACCOUNT_PAYOUT_MINIMUM_BALANCE_PER_PAYOUT_CURRENCY` in the codebase for the complete list.
+
+<Note>
+Minimum balance ensures payout amounts cover processing costs and bank transfer fees.
+</Note>
+
+## Multi-Currency Balances
+
+If you receive payments in multiple currencies:
+
+- Each currency maintains a separate balance
+- Payouts process in your account's default currency
+- Currency conversion happens during transfer
+- Exchange rates determined by Stripe at time of transfer
+
+## Balance Holds
+
+### Payout Safety Delay
+
+New revenue has a holding period before becoming available:
+
+- **Default**: 1 second (configurable via `ACCOUNT_PAYOUT_DELAY`)
+- Protects against fraud and disputes
+- Ensures funds are settled
+
+### Under Review Hold
+
+If your account is [under review](/merchant-of-record/account-reviews):
+
+- Balance accumulates normally
+- Payouts temporarily disabled
+- Resume after review completion
+
+## Transaction History
+
+### Viewing Transactions
+
+Access detailed transaction history:
+
+- Date and time
+- Transaction type
+- Amount and currency
+- Related order or subscription
+- Fee breakdown
+- Running balance
+
+### Filtering Transactions
+
+Filter by:
+
+- Date range
+- Transaction type
+- Product or subscription
+- Customer
+- Status
+
+### Exporting Data
+
+Export transaction history:
+
+- **CSV Format**: Spreadsheet-compatible
+- **Payout CSV**: Per-payout transaction breakdown
+- **API Export**: Programmatic data retrieval
+
+## Balance Reconciliation
+
+### Verifying Your Balance
+
+Reconcile your Polar balance with:
+
+1. Stripe dashboard transactions
+2. Bank account deposits
+3. Payout invoices
+4. Transaction CSV exports
+
+### Discrepancy Resolution
+
+If balances don't match:
+
+1. Check for pending transactions
+2. Verify refunds and disputes
+3. Review payout timing
+4. Contact support with transaction IDs
+
+## Balance Monitoring
+
+### Real-Time Updates
+
+Balance updates immediately when:
+
+- Customer completes payment
+- Refund is processed
+- Payout is created
+- Fees are calculated
+
+### Notifications
+
+Receive notifications for:
+
+- Balance milestones
+- Payout eligibility
+- Low balance warnings
+- Failed transactions
+
+## API Access
+
+### Checking Balance
+
+```javascript
+const account = await polar.accounts.get(accountId);
+console.log(`Balance: ${account.credit_balance}`);
+```
+
+### Calculating Available Payout
+
+```javascript
+const estimate = await polar.payouts.estimate({
+  account_id: accountId
+});
+
+console.log(`Gross: ${estimate.gross_amount}`);
+console.log(`Fees: ${estimate.fees_amount}`);
+console.log(`Net: ${estimate.net_amount}`);
+```
+
+## Best Practices
+
+### Monitor Regularly
+
+- Check balance weekly
+- Review transaction details
+- Track fee accumulation
+- Plan payout timing
+
+### Maintain Reserves
+
+- Keep buffer for potential refunds
+- Account for dispute reserves
+- Plan for seasonal variations
+
+### Optimize Payout Timing
+
+- Wait for minimum balance
+- Batch transactions when possible
+- Consider currency exchange timing
+- Account for bank processing time
+
+## Troubleshooting
+
+### Missing Transactions
+
+If transactions are missing:
+
+- Check date range filters
+- Verify transaction status
+- Review archived payouts
+- Contact support
+
+### Balance Doesn't Match
+
+Common causes:
+
+- Pending refunds not yet processed
+- Recent payouts in transit
+- Fee credits applied
+- Currency conversion differences
+
+### Cannot Create Payout
+
+Reasons:
+
+- Below minimum balance
+- Account under review
+- Payouts not enabled
+- Pending payout exists
+
+## Next Steps
+
+- Learn about [Payout Processing](/features/finance/payouts)
+- Set up your [Financial Account](/features/finance/accounts)
+- Understand [Fee Structure](/merchant-of-record/fees)

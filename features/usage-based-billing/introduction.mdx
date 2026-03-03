@@ -1,0 +1,302 @@
+---
+title: "Usage-Based Billing Overview"
+description: "Flexible metered billing that charges customers based on actual consumption"
+---
+
+Usage-based billing allows you to charge customers based on their actual consumption of your product or service, rather than fixed recurring fees. Polar's usage-based billing system provides real-time tracking, flexible pricing models, and automatic invoicing.
+
+## How It Works
+
+The usage-based billing system follows a simple workflow:
+
+<Steps>
+  <Step title="Send Events">
+    Your application sends usage events to Polar whenever a billable action occurs (API calls, storage used, tokens consumed, etc.)
+  </Step>
+  <Step title="Meters Aggregate Events">
+    Meters filter and aggregate events based on your configuration to calculate consumption
+  </Step>
+  <Step title="Credits Control Access">
+    Customer meters track credited units (prepaid or included) vs. consumed units to control access
+  </Step>
+  <Step title="Billing & Invoicing">
+    At the end of each billing cycle, consumption is calculated and invoiced automatically
+  </Step>
+</Steps>
+
+## Key Concepts
+
+### Events
+
+Events represent billable actions in your system. Each event contains:
+
+- **Timestamp**: When the action occurred
+- **Customer ID**: Who performed the action
+- **Name**: Type of event (e.g., `api.request`, `storage.used`)
+- **Metadata**: Additional context (e.g., tokens consumed, file size)
+
+Polar supports two types of events:
+- **User events**: Created by your application via the API
+- **System events**: Created automatically by Polar (subscriptions, credits, etc.)
+
+### Meters
+
+Meters define how to measure consumption by:
+
+1. **Filtering** events to include only relevant ones
+2. **Aggregating** events to calculate a quantity
+
+Example: A meter could count all `api.request` events where `metadata.model = "gpt-4"` and sum the `metadata.tokens` field.
+
+### Customer Meters
+
+Customer meters track the balance for each customer:
+
+- **Credited Units**: Prepaid credits or included allowance
+- **Consumed Units**: Actual usage measured by the meter
+- **Balance**: Remaining credits (`credited - consumed`)
+
+You can use the balance to control access to your product.
+
+### Billing Entries
+
+Billing entries are created for metered consumption during a billing period. They represent:
+
+- The time period (start and end timestamps)
+- The consumed units
+- The applicable price
+- The calculated amount to charge
+
+## Pricing Models
+
+Polar supports flexible metered pricing:
+
+### Per-Unit Pricing
+
+Charge a fixed amount per unit consumed:
+
+```
+Price: $0.01 per API call
+Usage: 1,000 calls
+Charge: $10.00
+```
+
+### Tiered Pricing
+
+Different rates for different usage levels:
+
+```
+First 1,000 calls: $0.01 each
+Next 9,000 calls: $0.008 each
+10,000+ calls: $0.005 each
+```
+
+### Volume Pricing
+
+Rate applies to all units based on total volume:
+
+```
+0-1,000 calls: $0.01 each (total)
+1,001-10,000 calls: $0.008 each (total)
+10,000+ calls: $0.005 each (total)
+```
+
+## Aggregation Functions
+
+Meters support multiple aggregation functions:
+
+| Function | Description | Example Use Case |
+|----------|-------------|------------------|
+| `count` | Count matching events | API requests, transactions |
+| `sum` | Sum a numeric property | Total tokens, total GB |
+| `max` | Maximum value observed | Peak concurrent users |
+| `min` | Minimum value observed | Lowest latency |
+| `avg` | Average value | Average response time |
+| `unique` | Count unique values | Unique users, unique IPs |
+
+## Common Use Cases
+
+### API Usage
+
+Charge based on API calls, categorized by endpoint or model:
+
+```json
+{
+  "name": "api.request",
+  "customer_id": "cus_...",
+  "metadata": {
+    "endpoint": "/v1/chat",
+    "model": "gpt-4",
+    "tokens": 1250
+  }
+}
+```
+
+### Storage & Bandwidth
+
+Track storage usage and data transfer:
+
+```json
+{
+  "name": "storage.snapshot",
+  "customer_id": "cus_...",
+  "metadata": {
+    "bytes": 5368709120,
+    "type": "backup"
+  }
+}
+```
+
+### Compute Resources
+
+Measure compute time, memory, or other resources:
+
+```json
+{
+  "name": "compute.job",
+  "customer_id": "cus_...",
+  "metadata": {
+    "duration_seconds": 3600,
+    "cpu_cores": 4,
+    "memory_gb": 16
+  }
+}
+```
+
+### Seats & Licenses
+
+Track active users or seats:
+
+```json
+{
+  "name": "user.active",
+  "customer_id": "cus_...",
+  "member_id": "mem_...",
+  "metadata": {
+    "email": "[email protected]",
+    "role": "admin"
+  }
+}
+```
+
+## Credit System
+
+The credit system provides flexibility for prepaid and included usage:
+
+### Included Credits
+
+Include credits with subscriptions as benefits:
+
+- Set up a "Meter Credit" benefit on your product
+- Specify number of units and whether they rollover
+- Credits are automatically added when subscription starts
+- Credits reset each billing cycle (unless rollover is enabled)
+
+### Prepaid Credits
+
+Sell prepaid credit packs:
+
+- Create a one-time product with meter credits
+- Customer purchases credits upfront
+- Credits are applied to their meter balance
+- Use for top-ups or pay-as-you-go models
+
+### Rollover
+
+Control whether unused credits carry forward:
+
+- **Rollover enabled**: Unused credits accumulate
+- **Rollover disabled**: Credits reset each cycle
+
+## Workflow Example
+
+Here's a complete example of usage-based billing in action:
+
+<Steps>
+  <Step title="Customer subscribes">
+    Customer subscribes to "Pro Plan" which includes:
+    - 10,000 API credits per month
+    - Metered billing at $0.001 per additional call
+  </Step>
+  
+  <Step title="Credits are added">
+    Polar automatically creates a `meter.credited` event adding 10,000 units to the customer's meter
+  </Step>
+  
+  <Step title="Customer uses your API">
+    Your application sends events as the customer makes API calls:
+    ```json
+    { "name": "api.request", "customer_id": "cus_..." }
+    ```
+  </Step>
+  
+  <Step title="Consumption is tracked">
+    The meter aggregates events in real-time:
+    - Consumed: 12,500 calls
+    - Credited: 10,000 calls
+    - Balance: -2,500 calls (overage)
+  </Step>
+  
+  <Step title="Billing entry is created">
+    Polar creates a billing entry for the overage:
+    - 2,500 units × $0.001 = $2.50
+  </Step>
+  
+  <Step title="Invoice is generated">
+    At billing cycle end, an invoice is created:
+    - Pro Plan subscription: $49.00
+    - Additional API calls (2,500 × $0.001): $2.50
+    - **Total: $51.50**
+  </Step>
+  
+  <Step title="Meter resets">
+    After invoicing, the meter resets and new credits are added for the next cycle
+  </Step>
+</Steps>
+
+## Best Practices
+
+### Event Design
+
+- **Use descriptive names**: `api.request` instead of `request`
+- **Include relevant metadata**: Add context needed for filtering and aggregation
+- **Keep events atomic**: One event per billable action
+- **Use timestamps correctly**: Set timestamp to when action occurred, not when event was sent
+
+### Meter Configuration
+
+- **Start simple**: Begin with basic count aggregations
+- **Test filters thoroughly**: Ensure events match as expected
+- **Consider granularity**: Balance detail with simplicity
+- **Document your meters**: Explain what each meter measures
+
+### Credit Management
+
+- **Set appropriate limits**: Match included credits to your pricing model
+- **Consider rollover carefully**: Rollover increases goodwill but reduces revenue
+- **Monitor balances**: Alert customers before they run out
+- **Provide visibility**: Show customers their usage and balance
+
+### Performance
+
+- **Batch events when possible**: Send multiple events in one request
+- **Use deduplication**: Set `external_id` to prevent duplicate billing
+- **Monitor ingestion rate**: Stay within API rate limits
+- **Cache meter balances**: Don't query on every request
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Event Ingestion" icon="cloud-arrow-up" href="/features/usage-based-billing/event-ingestion">
+    Learn how to send usage events to Polar
+  </Card>
+  <Card title="Meters" icon="gauge" href="/features/usage-based-billing/meters">
+    Configure meters to measure consumption
+  </Card>
+  <Card title="Credits" icon="coins" href="/features/usage-based-billing/credits">
+    Set up credit benefits and prepaid packs
+  </Card>
+  <Card title="Billing" icon="file-invoice-dollar" href="/features/usage-based-billing/billing">
+    Understand billing cycles and invoicing
+  </Card>
+</CardGroup>

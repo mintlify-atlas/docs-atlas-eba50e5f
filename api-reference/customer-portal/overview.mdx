@@ -1,0 +1,189 @@
+---
+title: 'Customer Portal API'
+description: 'API endpoints for building customer-facing portals to manage subscriptions, orders, and account settings'
+---
+
+The Customer Portal API provides endpoints for authenticated customers to manage their purchases, subscriptions, payment methods, and benefits directly from your application.
+
+## Authentication
+
+The Customer Portal API uses session-based authentication with magic link codes sent via email. Customers authenticate without needing a password.
+
+### Authentication Flow
+
+<Steps>
+  <Step title="Request a session code">
+    Call `POST /v1/customer-portal/customer-session/request` with the customer's email and organization ID.
+    
+    ```bash
+    curl -X POST https://api.polar.sh/v1/customer-portal/customer-session/request \
+      -H "Content-Type: application/json" \
+      -d '{
+        "email": "customer@example.com",
+        "organization_id": "your-org-id"
+      }'
+    ```
+    
+    The customer receives an email with a 6-digit code.
+  </Step>
+  
+  <Step title="Authenticate with the code">
+    Exchange the code for a session token using `POST /v1/customer-portal/customer-session/authenticate`.
+    
+    ```bash
+    curl -X POST https://api.polar.sh/v1/customer-portal/customer-session/authenticate \
+      -H "Content-Type: application/json" \
+      -d '{"code": "ABC123"}'
+    ```
+    
+    Returns a token:
+    ```json
+    {
+      "token": "polar_cst_..."
+    }
+    ```
+  </Step>
+  
+  <Step title="Use the token in requests">
+    Include the token in the Authorization header for all Customer Portal API requests.
+    
+    ```bash
+    curl https://api.polar.sh/v1/customer-portal/subscriptions \
+      -H "Authorization: Bearer polar_cst_..."
+    ```
+  </Step>
+</Steps>
+
+## Multiple Customers with Same Email
+
+When multiple customers share the same email address across different products, the request will return a 409 status with customer selection options:
+
+```json
+{
+  "error": "customer_selection_required",
+  "detail": "Multiple customers found for this email. Please select one.",
+  "customers": [
+    {"id": "customer-id-1", "name": "Acme Corp"},
+    {"id": "customer-id-2", "name": "Personal Account"}
+  ]
+}
+```
+
+Retry the request with the selected `customer_id`:
+
+```json
+{
+  "email": "customer@example.com",
+  "organization_id": "your-org-id",
+  "customer_id": "customer-id-1"
+}
+```
+
+## Session Introspection
+
+Retrieve information about the current session:
+
+```bash
+GET /v1/customer-portal/customer-session/introspect
+```
+
+Returns session expiration and return URL.
+
+## Authenticated User Info
+
+Get details about the authenticated customer or member:
+
+```bash
+GET /v1/customer-portal/customer-session/user
+```
+
+Returns:
+```json
+{
+  "type": "customer",
+  "name": "John Doe",
+  "email": "john@example.com",
+  "customer_id": "...",
+  "member_id": null,
+  "role": null
+}
+```
+
+For organizations with team features enabled, the type can be `"member"` with role information (owner, billing_manager, member).
+
+## Member vs Customer Sessions
+
+Polar supports two authentication models:
+
+- **Customer Sessions** (legacy): Direct customer authentication
+- **Member Sessions**: For organizations with team management enabled, where multiple members can access a customer account
+
+The API automatically handles both types. Members may have restricted permissions based on their role:
+
+- **owner**: Full access to all features
+- **billing_manager**: Can manage billing, subscriptions, and payment methods
+- **member**: Read-only access to purchases and benefits
+
+## Available Endpoints
+
+The Customer Portal API provides the following resource endpoints:
+
+<CardGroup cols={2}>
+  <Card title="Sessions" icon="key" href="/api-reference/customer-portal/sessions">
+    Authenticate customers and manage portal sessions
+  </Card>
+  <Card title="Subscriptions" icon="repeat" href="/api-reference/customer-portal/subscriptions">
+    View and manage customer subscriptions
+  </Card>
+  <Card title="Orders" icon="receipt" href="/api-reference/customer-portal/orders">
+    Access order history and invoices
+  </Card>
+  <Card title="Customer" icon="user" href="/api-reference/customer-portal/customer">
+    Manage customer profile and payment methods
+  </Card>
+  <Card title="Benefit Grants" icon="gift" href="/api-reference/customer-portal/benefit-grants">
+    Access granted benefits from purchases
+  </Card>
+  <Card title="Seats" icon="users" href="/api-reference/customer-portal/seats">
+    Manage seat assignments for team subscriptions
+  </Card>
+</CardGroup>
+
+## Error Handling
+
+The API uses standard HTTP status codes:
+
+- **200**: Success
+- **201**: Resource created
+- **204**: Success with no content
+- **400**: Bad request (validation error)
+- **401**: Authentication required or invalid token
+- **403**: Permission denied
+- **404**: Resource not found
+- **409**: Conflict (e.g., customer selection required)
+- **422**: Unprocessable entity (business logic error)
+
+Error responses include descriptive messages:
+
+```json
+{
+  "error": "resource_not_found",
+  "detail": "Subscription not found"
+}
+```
+
+## Rate Limiting
+
+The Customer Portal API is subject to rate limiting to ensure service stability. Standard rate limits apply per customer session.
+
+## Webhooks
+
+While the Customer Portal API is customer-facing, you can receive webhooks for customer actions:
+
+- `subscription.updated`: Customer modified their subscription
+- `subscription.canceled`: Customer canceled their subscription
+- `order.updated`: Customer updated order details
+- `payment_method.created`: Customer added a payment method
+- `payment_method.deleted`: Customer removed a payment method
+
+See the [Webhooks documentation](/webhooks) for more details.

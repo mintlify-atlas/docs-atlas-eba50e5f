@@ -1,0 +1,273 @@
+---
+title: Free Trial Management
+description: Offer free trials for subscription products to reduce friction and increase conversions
+---
+
+Free trials allow customers to try your subscription products before committing to payment. Polar handles trial periods automatically with flexible configuration options.
+
+## Overview
+
+Free trials:
+- Defer payment until the trial period ends
+- Automatically convert to paid subscriptions
+- Can be configured per product or per checkout
+- Support trial redemption tracking to prevent abuse
+
+<Note>
+Trials are only available for recurring (subscription) products, not one-time purchases.
+</Note>
+
+## Product Trial Configuration
+
+Configure default trial periods on your products:
+
+```json Product with 14-day trial
+{
+  "name": "Pro Plan",
+  "billing_type": "recurring",
+  "trial_interval": "day",
+  "trial_interval_count": 14
+}
+```
+
+### Trial Intervals
+
+Supported trial intervals:
+- `day`: Trial period in days
+- `week`: Trial period in weeks  
+- `month`: Trial period in months
+- `year`: Trial period in years
+
+```json Examples
+// 7-day trial
+{
+  "trial_interval": "day",
+  "trial_interval_count": 7
+}
+
+// 1-month trial
+{
+  "trial_interval": "month",
+  "trial_interval_count": 1
+}
+```
+
+## Checkout Trial Override
+
+Override the product's default trial period at checkout:
+
+```typescript
+const checkout = await polar.checkouts.create({
+  productPriceId: 'price_xxx',
+  trialEnd: new Date('2024-12-31')  // Custom trial end date
+});
+```
+
+<Warning>
+The checkout trial override takes precedence over the product's default trial configuration.
+</Warning>
+
+## How Trials Work
+
+<Steps>
+  <Step title="Subscription Created">
+    When a customer checks out with a trial:
+    - Subscription status: `trialing`
+    - `trial_start`: Set to current timestamp
+    - `trial_end`: Calculated based on trial interval
+    - `current_period_end`: Set to trial end
+  </Step>
+  
+  <Step title="During Trial">
+    - No charges are made
+    - Customer has full access to benefits
+    - Subscription shows as "trialing"
+    - `current_period_end` = `trial_end`
+  </Step>
+  
+  <Step title="Trial Ends">
+    When the trial period expires:
+    - First invoice is created and charged
+    - Status changes from `trialing` to `active`
+    - Normal billing cycle begins
+    - Benefits continue without interruption
+  </Step>
+</Steps>
+
+## Subscription Status During Trial
+
+```json Trialing Subscription
+{
+  "status": "trialing",
+  "trial_start": "2024-01-01T00:00:00Z",
+  "trial_end": "2024-01-15T00:00:00Z",
+  "current_period_start": "2024-01-01T00:00:00Z",
+  "current_period_end": "2024-01-15T00:00:00Z",
+  "started_at": "2024-01-01T00:00:00Z"
+}
+```
+
+## Managing Active Trials
+
+You can modify trial periods for active subscriptions:
+
+### Extend Trial
+
+Extend an active trial to a new end date:
+
+```typescript
+await polar.subscriptions.update({
+  id: 'sub_xxx',
+  trialEnd: new Date('2024-02-01')  // New trial end
+});
+```
+
+<Note>
+The new trial end must be after the current period end to prevent customer access loss.
+</Note>
+
+### End Trial Immediately
+
+Convert a trialing subscription to paid immediately:
+
+```typescript
+await polar.subscriptions.update({
+  id: 'sub_xxx',
+  trialEnd: 'now'  // End trial now
+});
+```
+
+This will:
+1. End the trial period
+2. Create and charge the first invoice
+3. Change status from `trialing` to `active`
+
+### Add Trial to Active Subscription
+
+You can add a trial period to an already-active subscription:
+
+```typescript
+await polar.subscriptions.update({
+  id: 'sub_xxx',  // Currently active
+  trialEnd: new Date('2024-12-31')
+});
+```
+
+<Warning>
+**Important**: The trial end must be after the current period end. This extends the subscription without billing, giving the customer free time.
+</Warning>
+
+## Trial Redemption Tracking
+
+Polar tracks trial redemptions to prevent abuse:
+
+### How It Works
+
+1. **Customer Identification**: Tracked by:
+   - Email address (case-insensitive)
+   - Payment method fingerprint
+   - Customer ID
+
+2. **Product-Level Tracking**: Redemptions are tracked per product
+
+3. **Automatic Prevention**: Polar checks if customer has already redeemed a trial for this product
+
+```typescript
+// Check if customer has already used trial
+const alreadyRedeemed = await checkTrialRedeemed({
+  product: product,
+  customerEmail: 'user@example.com',
+  paymentMethodFingerprint: 'pm_fingerprint_xxx'
+});
+```
+
+<Note>
+Trial redemption tracking helps prevent users from creating multiple accounts to abuse trial periods.
+</Note>
+
+## Trial Preview
+
+Get a preview of what the first charge will be after a trial:
+
+```typescript
+const preview = await polar.subscriptions.preview({
+  id: 'sub_xxx'  // Trialing subscription
+});
+
+console.log(preview.amount);  // First charge amount
+console.log(preview.items);   // Line items
+```
+
+<Note>
+Previews are available for both trialing and active subscriptions.
+</Note>
+
+## Discounts with Trials
+
+When combining trials with discounts:
+
+- **During Trial**: No charges, so no discount applied
+- **After Trial**: Discount applies to the first charge and subsequent charges (based on discount duration)
+
+```json Trial + Discount
+{
+  "productPriceId": "price_xxx",
+  "trialEnd": "2024-01-15T00:00:00Z",
+  "discountCode": "WELCOME25"  // Applied after trial
+}
+```
+
+## Trial Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Standard Trial Lengths" icon="calendar">
+    Common trial periods: 7, 14, or 30 days depending on product complexity
+  </Card>
+  
+  <Card title="Require Payment Method" icon="credit-card">
+    Collect payment details upfront for seamless conversion
+  </Card>
+  
+  <Card title="Communicate Clearly" icon="message">
+    Show trial end date and what happens when trial expires
+  </Card>
+  
+  <Card title="Onboarding Focus" icon="rocket">
+    Use trial period to deliver value and ensure successful onboarding
+  </Card>
+</CardGroup>
+
+## Trial Limitations
+
+<Warning>
+**Update Restrictions**: You cannot update certain subscription properties during the trial period. Wait until the trial ends or end it early using `trialEnd: 'now'`.
+</Warning>
+
+## Webhooks
+
+Trial-related webhook events:
+
+- `subscription.created`: Includes trial dates if applicable
+- `subscription.updated`: Triggered when trial dates change
+- `order.created`: First charge after trial ends
+
+```json subscription.created with Trial
+{
+  "type": "subscription.created",
+  "data": {
+    "id": "sub_xxx",
+    "status": "trialing",
+    "trial_start": "2024-01-01T00:00:00Z",
+    "trial_end": "2024-01-15T00:00:00Z"
+  }
+}
+```
+
+## API Reference
+
+See the full API documentation:
+
+- [Create Product](/api-reference/products/create) - Configure trial settings
+- [Create Checkout](/api-reference/checkouts/create) - Override trial period
+- [Update Subscription](/api-reference/subscriptions/update) - Manage active trials
+- [Preview Subscription](/api-reference/subscriptions/preview) - Preview post-trial charges

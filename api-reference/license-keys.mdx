@@ -1,0 +1,286 @@
+---
+title: License Keys
+description: Manage software license keys
+---
+
+## Overview
+
+License keys are automatically generated and granted to customers who purchase products with license key benefits. They support activation limits and expiration.
+
+## The License Key Object
+
+<ResponseField name="id" type="string" required>
+  Unique identifier
+</ResponseField>
+
+<ResponseField name="key" type="string" required>
+  The license key string
+</ResponseField>
+
+<ResponseField name="status" type="enum" required>
+  Status: `granted`, `revoked`, or `disabled`
+</ResponseField>
+
+<ResponseField name="customer_id" type="string" required>
+  Customer who owns the key
+</ResponseField>
+
+<ResponseField name="user_id" type="string">
+  Associated user ID
+</ResponseField>
+
+<ResponseField name="benefit_id" type="string" required>
+  Benefit that granted this key
+</ResponseField>
+
+<ResponseField name="organization_id" type="string" required>
+  Organization ID
+</ResponseField>
+
+<ResponseField name="expires_at" type="string">
+  Expiration timestamp
+</ResponseField>
+
+<ResponseField name="limit_activations" type="integer">
+  Maximum number of activations allowed
+</ResponseField>
+
+<ResponseField name="usage" type="integer" required>
+  Current number of activations
+</ResponseField>
+
+<ResponseField name="limit_usage" type="boolean" required>
+  Whether usage is limited
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  Creation timestamp
+</ResponseField>
+
+---
+
+## List License Keys
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/license-keys" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Query Parameters
+
+<ParamField query="organization_id" type="string">
+  Filter by organization
+</ParamField>
+
+<ParamField query="benefit_id" type="string">
+  Filter by benefit
+</ParamField>
+
+---
+
+## Get License Key
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/license-keys/{id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  License key ID
+</ParamField>
+
+### Response
+
+Includes activations array.
+
+---
+
+## Update License Key
+
+```bash cURL
+curl -X PATCH "https://api.polar.sh/v1/license-keys/{id}" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "disabled"
+  }'
+```
+
+### Request Body
+
+<ParamField body="status" type="enum">
+  Update status: `granted`, `revoked`, or `disabled`
+</ParamField>
+
+<ParamField body="limit_activations" type="integer">
+  Update activation limit
+</ParamField>
+
+---
+
+## Validate License Key
+
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/license-keys/validate" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "PRO-XXXX-XXXX-XXXX",
+    "organization_id": "org_123"
+  }'
+```
+
+Validate a license key and get its details.
+
+### Request Body
+
+<ParamField body="key" type="string" required>
+  License key to validate
+</ParamField>
+
+<ParamField body="organization_id" type="string" required>
+  Organization ID
+</ParamField>
+
+<ParamField body="benefit_id" type="string">
+  Specific benefit to validate against
+</ParamField>
+
+### Response
+
+Returns the license key object if valid.
+
+---
+
+## Activate License Key
+
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/license-keys/activate" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "PRO-XXXX-XXXX-XXXX",
+    "organization_id": "org_123",
+    "label": "MacBook Pro"
+  }'
+```
+
+Activate a license key on a new device/instance.
+
+### Request Body
+
+<ParamField body="key" type="string" required>
+  License key
+</ParamField>
+
+<ParamField body="organization_id" type="string" required>
+  Organization ID
+</ParamField>
+
+<ParamField body="label" type="string">
+  Device/instance label
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Activation metadata
+</ParamField>
+
+### Response
+
+Returns activation object.
+
+### Errors
+
+<ResponseField name="403" type="Forbidden">
+  Activation limit reached or key is revoked
+</ResponseField>
+
+---
+
+## Deactivate License Key
+
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/license-keys/deactivate" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "PRO-XXXX-XXXX-XXXX",
+    "organization_id": "org_123",
+    "activation_id": "activation_123"
+  }'
+```
+
+### Request Body
+
+<ParamField body="key" type="string" required>
+  License key
+</ParamField>
+
+<ParamField body="organization_id" type="string" required>
+  Organization ID
+</ParamField>
+
+<ParamField body="activation_id" type="string" required>
+  Activation ID to deactivate
+</ParamField>
+
+---
+
+## Get Activation
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/license-keys/{id}/activations/{activation_id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  License key ID
+</ParamField>
+
+<ParamField path="activation_id" type="string" required>
+  Activation ID
+</ParamField>
+
+---
+
+## Examples
+
+### Validate and Activate
+
+```bash
+# First, validate the key
+curl -X POST "https://api.polar.sh/v1/license-keys/validate" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "PRO-1234-5678-9ABC",
+    "organization_id": "org_xyz"
+  }'
+
+# Then activate it
+curl -X POST "https://api.polar.sh/v1/license-keys/activate" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "key": "PRO-1234-5678-9ABC",
+    "organization_id": "org_xyz",
+    "label": "Production Server",
+    "metadata": {
+      "hostname": "prod-01.example.com",
+      "ip": "192.168.1.100"
+    }
+  }'
+```
+
+### Disable a License Key
+
+```bash
+curl -X PATCH "https://api.polar.sh/v1/license-keys/lk_123" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{"status": "disabled"}'
+```

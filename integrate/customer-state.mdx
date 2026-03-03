@@ -1,0 +1,681 @@
+---
+title: "Customer State API"
+description: "Check customer entitlements and active subscriptions"
+icon: "users"
+---
+
+The Customer State API provides a complete overview of a customer's status, including active subscriptions, granted benefits, and usage meters. This is the ideal endpoint for entitlement checks and access control.
+
+## Overview
+
+The Customer State endpoint returns comprehensive information about a customer:
+
+- **Active Subscriptions**: All current subscriptions with billing details
+- **Granted Benefits**: Active benefit grants and their properties
+- **Active Meters**: Current consumption and credits for usage-based features
+
+<Note>
+This endpoint is optimized for frequent access control checks. Use it to determine what features a customer can access in your application.
+</Note>
+
+## Endpoints
+
+There are two ways to retrieve customer state:
+
+<CardGroup cols={2}>
+  <Card title="By Customer ID" icon="fingerprint">
+    ```
+    GET /v1/customers/{id}/state
+    ```
+    Use when you have Polar's internal customer ID.
+  </Card>
+
+  <Card title="By External ID" icon="id-card">
+    ```
+    GET /v1/customers/external/{external_id}/state
+    ```
+    Use when tracking customers by your own external ID.
+  </Card>
+</CardGroup>
+
+## Basic Usage
+
+<CodeGroup>
+```bash curl (by Customer ID)
+curl https://api.polar.sh/v1/customers/cus_01h2s3f4g5h6j7k8m9n0p1q2/state \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+```bash curl (by External ID)
+curl https://api.polar.sh/v1/customers/external/user_12345/state \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+```typescript TypeScript
+import { Polar } from "@polar-sh/sdk";
+
+const polar = new Polar({
+  accessToken: process.env.POLAR_ACCESS_TOKEN,
+});
+
+// By Customer ID
+const state = await polar.customers.getState({
+  id: "cus_01h2s3f4g5h6j7k8m9n0p1q2",
+});
+
+// By External ID
+const stateByExternal = await polar.customers.getStateExternal({
+  externalId: "user_12345",
+});
+```
+
+```python Python
+from polar_sdk import Polar
+
+polar = Polar(
+    access_token="YOUR_ACCESS_TOKEN"
+)
+
+# By Customer ID
+state = polar.customers.get_state(
+    id="cus_01h2s3f4g5h6j7k8m9n0p1q2"
+)
+
+# By External ID
+state_by_external = polar.customers.get_state_external(
+    external_id="user_12345"
+)
+```
+
+```php PHP
+use Polar\Polar;
+
+$polar = Polar::make(
+    accessToken: 'YOUR_ACCESS_TOKEN'
+);
+
+// By Customer ID
+$state = $polar->customers->getState(
+    id: 'cus_01h2s3f4g5h6j7k8m9n0p1q2'
+);
+
+// By External ID
+$stateByExternal = $polar->customers->getStateExternal(
+    externalId: 'user_12345'
+);
+```
+
+```go Go
+import (
+    polar "github.com/polarsource/polar-go"
+)
+
+client := polar.NewClient(
+    polar.WithAccessToken("YOUR_ACCESS_TOKEN"),
+)
+
+// By Customer ID
+state, err := client.Customers.GetState(ctx, "cus_01h2s3f4g5h6j7k8m9n0p1q2")
+
+// By External ID
+stateByExternal, err := client.Customers.GetStateExternal(ctx, "user_12345")
+```
+</CodeGroup>
+
+## Response Structure
+
+The customer state response includes all customer information plus additional state data:
+
+```json
+{
+  "id": "cus_01h2s3f4g5h6j7k8m9n0p1q2",
+  "email": "customer@example.com",
+  "name": "Jane Doe",
+  "external_id": "user_12345",
+  "created_at": "2025-01-03T13:37:00Z",
+  "modified_at": "2025-02-15T10:20:00Z",
+  "metadata": {
+    "internal_user_id": "usr_abc123",
+    "signup_source": "organic"
+  },
+  
+  "active_subscriptions": [
+    {
+      "id": "sub_01h2s3f4g5h6j7k8m9n0p1q2",
+      "status": "active",
+      "amount": 2900,
+      "currency": "usd",
+      "recurring_interval": "month",
+      "current_period_start": "2025-02-03T13:37:00Z",
+      "current_period_end": "2025-03-03T13:37:00Z",
+      "cancel_at_period_end": false,
+      "started_at": "2025-01-03T13:37:00Z",
+      "product_id": "prod_01h2s3f4g5h6j7k8m9n0p1q2",
+      "meters": [
+        {
+          "meter_id": "mtr_01h2s3f4g5h6j7k8m9n0p1q2",
+          "consumed_units": 2500.0,
+          "spending": 750,
+          "currency": "usd"
+        }
+      ]
+    }
+  ],
+  
+  "granted_benefits": [
+    {
+      "id": "bg_01h2s3f4g5h6j7k8m9n0p1q2",
+      "granted_at": "2025-01-03T13:37:00Z",
+      "benefit_id": "ben_01h2s3f4g5h6j7k8m9n0p1q2",
+      "benefit_type": "custom",
+      "benefit_metadata": {
+        "feature": "premium_api_access"
+      },
+      "properties": {
+        "note": "Premium API access granted"
+      }
+    }
+  ],
+  
+  "active_meters": [
+    {
+      "meter_id": "mtr_01h2s3f4g5h6j7k8m9n0p1q2",
+      "consumed_units": 2500.0,
+      "credited_units": 5000,
+      "balance": 2500.0
+    }
+  ]
+}
+```
+
+## Common Use Cases
+
+### Access Control
+
+Check if a customer has access to a specific feature:
+
+<CodeGroup>
+```typescript TypeScript
+async function hasFeatureAccess(
+  customerId: string,
+  featureName: string
+): Promise<boolean> {
+  const state = await polar.customers.getState({ id: customerId });
+  
+  // Check if any granted benefit includes this feature
+  return state.grantedBenefits.some(
+    (benefit) => benefit.benefitMetadata?.feature === featureName
+  );
+}
+
+// Usage
+const hasAccess = await hasFeatureAccess(
+  "cus_01h2s3f4g5h6j7k8m9n0p1q2",
+  "premium_api_access"
+);
+
+if (hasAccess) {
+  // Allow access to premium API
+}
+```
+
+```python Python
+def has_feature_access(
+    customer_id: str,
+    feature_name: str
+) -> bool:
+    state = polar.customers.get_state(id=customer_id)
+    
+    # Check if any granted benefit includes this feature
+    return any(
+        benefit.benefit_metadata.get("feature") == feature_name
+        for benefit in state.granted_benefits
+    )
+
+# Usage
+has_access = has_feature_access(
+    "cus_01h2s3f4g5h6j7k8m9n0p1q2",
+    "premium_api_access"
+)
+
+if has_access:
+    # Allow access to premium API
+    pass
+```
+
+```php PHP
+function hasFeatureAccess(
+    string $customerId,
+    string $featureName
+): bool {
+    global $polar;
+    $state = $polar->customers->getState(id: $customerId);
+    
+    foreach ($state->grantedBenefits as $benefit) {
+        if (($benefit->benefitMetadata['feature'] ?? null) === $featureName) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Usage
+$hasAccess = hasFeatureAccess(
+    'cus_01h2s3f4g5h6j7k8m9n0p1q2',
+    'premium_api_access'
+);
+```
+</CodeGroup>
+
+### Subscription Status Check
+
+Verify if a customer has an active subscription:
+
+<CodeGroup>
+```typescript TypeScript
+function hasActiveSubscription(customerId: string): Promise<boolean> {
+  const state = await polar.customers.getState({ id: customerId });
+  return state.activeSubscriptions.length > 0;
+}
+
+// Check for specific product
+function hasSubscriptionToProduct(
+  customerId: string,
+  productId: string
+): Promise<boolean> {
+  const state = await polar.customers.getState({ id: customerId });
+  return state.activeSubscriptions.some(
+    (sub) => sub.productId === productId
+  );
+}
+```
+
+```python Python
+def has_active_subscription(customer_id: str) -> bool:
+    state = polar.customers.get_state(id=customer_id)
+    return len(state.active_subscriptions) > 0
+
+# Check for specific product
+def has_subscription_to_product(
+    customer_id: str,
+    product_id: str
+) -> bool:
+    state = polar.customers.get_state(id=customer_id)
+    return any(
+        sub.product_id == product_id
+        for sub in state.active_subscriptions
+    )
+```
+</CodeGroup>
+
+### Usage-Based Billing Check
+
+Check remaining credits for usage-based features:
+
+<CodeGroup>
+```typescript TypeScript
+async function getRemainingCredits(
+  customerId: string,
+  meterId: string
+): Promise<number> {
+  const state = await polar.customers.getState({ id: customerId });
+  
+  const meter = state.activeMeters.find(
+    (m) => m.meterId === meterId
+  );
+  
+  return meter?.balance ?? 0;
+}
+
+// Usage
+const remaining = await getRemainingCredits(
+  "cus_01h2s3f4g5h6j7k8m9n0p1q2",
+  "mtr_api_calls"
+);
+
+if (remaining > 0) {
+  // Allow API call
+} else {
+  // Show upgrade prompt
+}
+```
+
+```python Python
+def get_remaining_credits(
+    customer_id: str,
+    meter_id: str
+) -> float:
+    state = polar.customers.get_state(id=customer_id)
+    
+    meter = next(
+        (m for m in state.active_meters if m.meter_id == meter_id),
+        None
+    )
+    
+    return meter.balance if meter else 0.0
+
+# Usage
+remaining = get_remaining_credits(
+    "cus_01h2s3f4g5h6j7k8m9n0p1q2",
+    "mtr_api_calls"
+)
+
+if remaining > 0:
+    # Allow API call
+    pass
+else:
+    # Show upgrade prompt
+    pass
+```
+</CodeGroup>
+
+### Subscription Details Display
+
+Show subscription information to the customer:
+
+<CodeGroup>
+```typescript TypeScript
+function formatSubscriptionInfo(customerId: string) {
+  const state = await polar.customers.getState({ id: customerId });
+  
+  if (state.activeSubscriptions.length === 0) {
+    return "No active subscription";
+  }
+  
+  const sub = state.activeSubscriptions[0];
+  const amount = (sub.amount / 100).toFixed(2);
+  const renewDate = new Date(sub.currentPeriodEnd).toLocaleDateString();
+  
+  return {
+    plan: sub.productId,
+    amount: `$${amount} ${sub.currency.toUpperCase()}`,
+    interval: sub.recurringInterval,
+    renewDate,
+    willCancel: sub.cancelAtPeriodEnd,
+  };
+}
+```
+
+```python Python
+from datetime import datetime
+
+def format_subscription_info(customer_id: str) -> dict:
+    state = polar.customers.get_state(id=customer_id)
+    
+    if not state.active_subscriptions:
+        return {"message": "No active subscription"}
+    
+    sub = state.active_subscriptions[0]
+    amount = sub.amount / 100
+    renew_date = datetime.fromisoformat(
+        sub.current_period_end.replace('Z', '+00:00')
+    ).strftime('%Y-%m-%d')
+    
+    return {
+        "plan": sub.product_id,
+        "amount": f"${amount:.2f} {sub.currency.upper()}",
+        "interval": sub.recurring_interval,
+        "renew_date": renew_date,
+        "will_cancel": sub.cancel_at_period_end,
+    }
+```
+</CodeGroup>
+
+## Caching Strategies
+
+The customer state can change when:
+- Subscriptions are created, updated, or canceled
+- Benefits are granted or revoked
+- Usage credits are consumed or credited
+
+<AccordionGroup>
+  <Accordion title="Short-lived Cache (Recommended)">
+    Cache customer state for 1-5 minutes to balance freshness and performance:
+    
+    ```typescript
+    import { createCache } from 'cache-manager';
+    
+    const stateCache = createCache({ ttl: 300 }); // 5 minutes
+    
+    async function getCachedCustomerState(customerId: string) {
+      const cacheKey = `customer_state:${customerId}`;
+      
+      let state = await stateCache.get(cacheKey);
+      if (!state) {
+        state = await polar.customers.getState({ id: customerId });
+        await stateCache.set(cacheKey, state);
+      }
+      
+      return state;
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Webhook-driven Cache">
+    Invalidate cache when receiving relevant webhooks:
+    
+    ```typescript
+    // Webhook handler
+    app.post('/webhooks/polar', async (req, res) => {
+      const event = req.body;
+      
+      // Invalidate cache on subscription/benefit changes
+      if ([
+        'subscription.created',
+        'subscription.updated',
+        'subscription.canceled',
+        'benefit_grant.created',
+        'benefit_grant.revoked',
+      ].includes(event.type)) {
+        const customerId = event.data.customer_id;
+        await stateCache.del(`customer_state:${customerId}`);
+      }
+      
+      res.sendStatus(200);
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Request-scoped Cache">
+    For web applications, cache within a single request:
+    
+    ```typescript
+    // Middleware to attach state to request
+    app.use(async (req, res, next) => {
+      if (req.user?.customerId) {
+        req.customerState = await polar.customers.getState({
+          id: req.user.customerId,
+        });
+      }
+      next();
+    });
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<Warning>
+Don't cache customer state indefinitely. Always set a reasonable TTL or use webhook-driven invalidation to ensure entitlements are up to date.
+</Warning>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use External IDs" icon="id-card">
+    Store your internal user ID as the customer's `external_id` for easier lookups without managing Polar IDs.
+  </Card>
+
+  <Card title="Check Specific Benefits" icon="list-check">
+    Query for specific benefit types or metadata rather than checking all benefits on every request.
+  </Card>
+
+  <Card title="Handle Missing Customers" icon="user-slash">
+    Gracefully handle 404 responses when a customer doesn't exist in Polar yet.
+  </Card>
+
+  <Card title="Cache Appropriately" icon="clock">
+    Balance freshness and performance with a 1-5 minute cache TTL for customer state.
+  </Card>
+</CardGroup>
+
+## Error Handling
+
+Handle common error scenarios:
+
+<CodeGroup>
+```typescript TypeScript
+try {
+  const state = await polar.customers.getState({
+    id: customerId,
+  });
+  
+  // Process state
+} catch (error) {
+  if (error.statusCode === 404) {
+    // Customer doesn't exist - create one or deny access
+    console.log('Customer not found');
+  } else if (error.statusCode === 401) {
+    // Invalid or expired token
+    console.error('Authentication failed');
+  } else if (error.statusCode === 429) {
+    // Rate limit exceeded - implement retry with backoff
+    console.error('Rate limit exceeded');
+  } else {
+    // Other errors
+    console.error('Failed to fetch customer state:', error);
+  }
+}
+```
+
+```python Python
+from polar_sdk.exceptions import (
+    NotFoundError,
+    UnauthorizedError,
+    RateLimitError,
+)
+
+try:
+    state = polar.customers.get_state(id=customer_id)
+    # Process state
+except NotFoundError:
+    # Customer doesn't exist
+    print("Customer not found")
+except UnauthorizedError:
+    # Invalid or expired token
+    print("Authentication failed")
+except RateLimitError:
+    # Rate limit exceeded
+    print("Rate limit exceeded")
+except Exception as e:
+    # Other errors
+    print(f"Failed to fetch customer state: {e}")
+```
+</CodeGroup>
+
+## Performance Considerations
+
+<AccordionGroup>
+  <Accordion title="Response Time">
+    The customer state endpoint is optimized for fast access:
+    - Typical response time: 50-200ms
+    - Includes denormalized data to avoid multiple queries
+    - Uses Redis caching internally for frequently accessed customers
+  </Accordion>
+
+  <Accordion title="Reduce API Calls">
+    Minimize API calls by:
+    - Implementing client-side caching
+    - Using webhooks for state changes
+    - Batching entitlement checks when possible
+    - Loading state once per session rather than per request
+  </Accordion>
+
+  <Accordion title="Bulk Operations">
+    For checking multiple customers, make concurrent requests:
+    ```typescript
+    const states = await Promise.all(
+      customerIds.map(id => polar.customers.getState({ id }))
+    );
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Integration Patterns
+
+### Middleware Pattern
+
+Create middleware to inject customer state into requests:
+
+```typescript
+import { Request, Response, NextFunction } from 'express';
+
+async function customerStateMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
+  if (!req.user?.customerId) {
+    return next();
+  }
+  
+  try {
+    req.customerState = await polar.customers.getState({
+      id: req.user.customerId,
+    });
+  } catch (error) {
+    // Log error but don't block request
+    console.error('Failed to load customer state:', error);
+  }
+  
+  next();
+}
+
+app.use(customerStateMiddleware);
+```
+
+### Feature Flag Pattern
+
+Use customer state as feature flags:
+
+```typescript
+class FeatureFlags {
+  constructor(private customerState: CustomerState) {}
+  
+  hasFeature(featureName: string): boolean {
+    return this.customerState.grantedBenefits.some(
+      (benefit) => benefit.benefitMetadata?.feature === featureName
+    );
+  }
+  
+  getPlanTier(): string {
+    const sub = this.customerState.activeSubscriptions[0];
+    return sub?.productId ?? 'free';
+  }
+  
+  getRemainingQuota(meterId: string): number {
+    const meter = this.customerState.activeMeters.find(
+      (m) => m.meterId === meterId
+    );
+    return meter?.balance ?? 0;
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Webhooks" icon="webhook" href="/integrate/webhooks/endpoints">
+    Set up webhooks to receive customer state change notifications
+  </Card>
+
+  <Card title="Customer API" icon="users" href="/api-reference/customers">
+    Explore the complete Customer API reference
+  </Card>
+
+  <Card title="Benefits" icon="gift" href="/api-reference/benefits">
+    Learn about benefit types and management
+  </Card>
+
+  <Card title="Usage-Based Billing" icon="chart-line" href="/features/usage-based-billing/introduction">
+    Implement usage-based billing with meters
+  </Card>
+</CardGroup>

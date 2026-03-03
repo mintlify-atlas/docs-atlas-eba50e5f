@@ -1,122 +1,216 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Polar",
+  "description": "Open source payments infrastructure and merchant of record for developers to monetize digital products and SaaS.",
+  "theme": "maple",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#000000",
+    "light": "#ffffff",
+    "dark": "#000000"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/polarsource/polar"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/polarsource/polar"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Getting Started",
             "pages": [
-              "index",
+              "introduction",
               "quickstart",
-              "development"
+              "migrate"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Features",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "features/products",
+              "features/checkout",
+              "features/subscriptions",
+              "features/orders",
+              "features/benefits"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Usage-Based Billing",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "features/usage-based-billing/introduction",
+              "features/usage-based-billing/event-ingestion",
+              "features/usage-based-billing/meters",
+              "features/usage-based-billing/credits",
+              "features/usage-based-billing/billing"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Payments & Billing",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "features/discounts",
+              "features/refunds",
+              "features/trials",
+              "features/seat-based-pricing",
+              "features/custom-fields"
+            ]
+          },
+          {
+            "group": "Customer Management",
+            "pages": [
+              "features/customer-management",
+              "features/customer-portal",
+              "features/analytics"
+            ]
+          },
+          {
+            "group": "Finance",
+            "pages": [
+              "features/finance/accounts",
+              "features/finance/balance",
+              "features/finance/payouts"
+            ]
+          },
+          {
+            "group": "Merchant of Record",
+            "pages": [
+              "merchant-of-record/introduction",
+              "merchant-of-record/fees",
+              "merchant-of-record/supported-countries",
+              "merchant-of-record/acceptable-use",
+              "merchant-of-record/account-reviews"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Integration",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Getting Started",
+            "pages": [
+              "integrate/authentication",
+              "integrate/sandbox",
+              "integrate/customer-state"
+            ]
+          },
+          {
+            "group": "SDKs",
+            "pages": [
+              "integrate/sdk/typescript",
+              "integrate/sdk/python",
+              "integrate/sdk/php",
+              "integrate/sdk/golang"
+            ]
+          },
+          {
+            "group": "Framework Adapters",
+            "pages": [
+              "integrate/sdk/adapters/nextjs",
+              "integrate/sdk/adapters/astro",
+              "integrate/sdk/adapters/remix",
+              "integrate/sdk/adapters/sveltekit",
+              "integrate/sdk/adapters/laravel"
+            ]
+          },
+          {
+            "group": "Webhooks",
+            "pages": [
+              "integrate/webhooks/endpoints",
+              "integrate/webhooks/events",
+              "integrate/webhooks/delivery",
+              "integrate/webhooks/locally"
+            ]
+          },
+          {
+            "group": "OAuth 2.0",
+            "pages": [
+              "integrate/oauth2/introduction",
+              "integrate/oauth2/setup",
+              "integrate/oauth2/connect"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
             "pages": [
               "api-reference/introduction"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Core Resources",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api-reference/products",
+              "api-reference/checkouts",
+              "api-reference/subscriptions",
+              "api-reference/orders",
+              "api-reference/customers"
+            ]
+          },
+          {
+            "group": "Billing & Payments",
+            "pages": [
+              "api-reference/discounts",
+              "api-reference/refunds",
+              "api-reference/benefits",
+              "api-reference/license-keys"
+            ]
+          },
+          {
+            "group": "Usage-Based Billing",
+            "pages": [
+              "api-reference/events",
+              "api-reference/meters",
+              "api-reference/customer-meters"
+            ]
+          },
+          {
+            "group": "Management",
+            "pages": [
+              "api-reference/organizations",
+              "api-reference/webhooks",
+              "api-reference/files"
+            ]
+          },
+          {
+            "group": "Customer Portal API",
+            "pages": [
+              "api-reference/customer-portal/overview",
+              "api-reference/customer-portal/sessions",
+              "api-reference/customer-portal/subscriptions",
+              "api-reference/customer-portal/orders"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/introduction",
+              "guides/nextjs",
+              "guides/laravel",
+              "guides/checkout-session",
+              "guides/subscription-upgrades",
+              "guides/subscription-downgrades",
+              "guides/seat-based-pricing"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

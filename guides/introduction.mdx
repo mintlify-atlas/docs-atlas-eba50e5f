@@ -1,0 +1,186 @@
+---
+title: 'Guides'
+description: 'Step-by-step tutorials for integrating Polar into your application'
+---
+
+These guides provide complete, production-ready examples for integrating Polar's payment and subscription features into your application.
+
+## Getting Started
+
+<CardGroup cols={2}>
+  <Card title="Next.js Integration" icon="react" href="/guides/nextjs">
+    Complete setup for Next.js applications with server actions
+  </Card>
+  <Card title="Laravel Integration" icon="php" href="/guides/laravel">
+    Full integration guide for Laravel applications
+  </Card>
+</CardGroup>
+
+## Core Features
+
+<CardGroup cols={2}>
+  <Card title="Checkout Sessions" icon="cart-shopping" href="/guides/checkout-session">
+    Create secure checkout flows for products and subscriptions
+  </Card>
+  <Card title="Subscription Upgrades" icon="arrow-up" href="/guides/subscription-upgrades">
+    Handle subscription plan upgrades with proration
+  </Card>
+  <Card title="Subscription Downgrades" icon="arrow-down" href="/guides/subscription-downgrades">
+    Manage subscription downgrades and cancellations
+  </Card>
+  <Card title="Seat-Based Pricing" icon="users" href="/guides/seat-based-pricing">
+    Implement team subscriptions with seat management
+  </Card>
+</CardGroup>
+
+## Prerequisites
+
+Before following these guides, you'll need:
+
+<Steps>
+  <Step title="Polar Account">
+    Sign up at [polar.sh](https://polar.sh) and create an organization.
+  </Step>
+  
+  <Step title="API Keys">
+    Generate API keys from your Polar dashboard under Settings > API Keys.
+  </Step>
+  
+  <Step title="Products Setup">
+    Create at least one product with pricing in your Polar dashboard.
+  </Step>
+  
+  <Step title="Development Environment">
+    Set up your development environment with your preferred framework.
+  </Step>
+</Steps>
+
+## API Authentication
+
+All Polar API requests require authentication using your API key:
+
+```bash
+curl https://api.polar.sh/v1/products \
+  -H "Authorization: Bearer polar_sk_..."
+```
+
+<Warning>
+  Never expose your API keys in client-side code. Always make API calls from your backend.
+</Warning>
+
+## SDK Libraries
+
+Polar provides official SDK libraries for popular languages:
+
+<CodeGroup>
+```typescript TypeScript / JavaScript
+import { Polar } from '@polar-sh/sdk'
+
+const polar = new Polar({
+  accessToken: process.env.POLAR_API_KEY,
+})
+```
+
+```python Python
+from polar_sdk import Polar
+
+polar = Polar(
+    access_token=os.environ["POLAR_API_KEY"]
+)
+```
+
+```php PHP
+use Polar\Polar;
+
+$polar = new Polar(
+    accessToken: $_ENV['POLAR_API_KEY']
+);
+```
+</CodeGroup>
+
+## Testing
+
+Use Polar's sandbox environment for testing:
+
+1. **Sandbox API Keys**: Use `polar_sk_test_...` keys for testing
+2. **Test Cards**: Use Stripe test card numbers (4242 4242 4242 4242)
+3. **Webhooks**: Use webhook test mode or tools like ngrok for local testing
+
+## Common Patterns
+
+### Error Handling
+
+All guides include comprehensive error handling examples:
+
+```typescript
+try {
+  const checkout = await polar.checkouts.create({
+    productPriceId: 'price_123',
+  })
+} catch (error) {
+  if (error.statusCode === 404) {
+    // Product not found
+  } else if (error.statusCode === 403) {
+    // Permission denied
+  } else {
+    // Other error
+  }
+}
+```
+
+### Webhooks
+
+Many guides demonstrate webhook handling for async events:
+
+```typescript
+app.post('/webhooks/polar', async (req, res) => {
+  const event = polar.webhooks.verifyEvent(
+    req.body,
+    req.headers['polar-signature']
+  )
+  
+  switch (event.type) {
+    case 'subscription.created':
+      // Handle new subscription
+      break
+    case 'order.succeeded':
+      // Handle successful order
+      break
+  }
+  
+  res.json({ received: true })
+})
+```
+
+### Customer Portal
+
+Building customer-facing portals for subscription management:
+
+```typescript
+// Authenticate customer
+const { token } = await polar.customerSessions.create({
+  email: customer.email,
+  organizationId: 'org_123',
+})
+
+// Customer can now manage their subscriptions
+const subscriptions = await polar.customerPortal.subscriptions.list()
+```
+
+## Next Steps
+
+Choose a guide based on your use case:
+
+- **New to Polar?** Start with the [Next.js](/guides/nextjs) or [Laravel](/guides/laravel) integration guide
+- **Adding checkout?** See [Creating Checkout Sessions](/guides/checkout-session)
+- **Managing subscriptions?** Check out [Subscription Upgrades](/guides/subscription-upgrades) and [Downgrades](/guides/subscription-downgrades)
+- **Team plans?** Follow the [Seat-Based Pricing](/guides/seat-based-pricing) guide
+
+## Support
+
+Need help? We're here for you:
+
+- **Documentation**: Browse the full [API reference](/api-reference)
+- **Discord**: Join our [Discord community](https://discord.gg/polar)
+- **Email**: Contact support@polar.sh
+- **GitHub**: Report issues at [github.com/polarsource/polar](https://github.com/polarsource/polar)

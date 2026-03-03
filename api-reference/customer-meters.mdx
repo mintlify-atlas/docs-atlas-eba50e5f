@@ -1,0 +1,126 @@
+---
+title: Customer Meters
+description: View customer-specific meter usage
+---
+
+## Overview
+
+Customer meters show usage quantities for specific customers and meters. This is useful for displaying usage dashboards and understanding billing.
+
+## The Customer Meter Object
+
+<ResponseField name="id" type="string" required>
+  Unique identifier
+</ResponseField>
+
+<ResponseField name="customer_id" type="string" required>
+  Customer ID
+</ResponseField>
+
+<ResponseField name="meter_id" type="string" required>
+  Meter ID
+</ResponseField>
+
+<ResponseField name="quantity" type="number" required>
+  Current quantity/usage
+</ResponseField>
+
+<ResponseField name="period_start" type="string" required>
+  Current billing period start
+</ResponseField>
+
+<ResponseField name="period_end" type="string" required>
+  Current billing period end
+</ResponseField>
+
+<ResponseField name="last_synced_at" type="string" required>
+  When usage was last calculated
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  Creation timestamp
+</ResponseField>
+
+---
+
+## List Customer Meters
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/customer-meters" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Query Parameters
+
+<ParamField query="organization_id" type="string">
+  Filter by organization
+</ParamField>
+
+<ParamField query="customer_id" type="string">
+  Filter by customer
+</ParamField>
+
+<ParamField query="external_customer_id" type="string">
+  Filter by external customer ID
+</ParamField>
+
+<ParamField query="meter_id" type="string">
+  Filter by meter
+</ParamField>
+
+---
+
+## Get Customer Meter
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/customer-meters/{id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Customer meter ID
+</ParamField>
+
+---
+
+## Examples
+
+### Get Customer's Usage
+
+```bash
+curl -X GET "https://api.polar.sh/v1/customer-meters?customer_id=cust_123" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Get Specific Meter Usage
+
+```bash
+curl -X GET "https://api.polar.sh/v1/customer-meters?customer_id=cust_123&meter_id=meter_api_calls" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+Response:
+
+```json
+{
+  "items": [
+    {
+      "id": "cm_123",
+      "customer_id": "cust_123",
+      "meter_id": "meter_api_calls",
+      "quantity": 15420,
+      "period_start": "2024-01-01T00:00:00Z",
+      "period_end": "2024-02-01T00:00:00Z",
+      "last_synced_at": "2024-01-15T12:00:00Z",
+      "created_at": "2024-01-01T00:00:00Z"
+    }
+  ],
+  "pagination": {
+    "total_count": 1,
+    "page": 1,
+    "page_size": 20
+  }
+}
+```

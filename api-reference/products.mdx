@@ -1,0 +1,700 @@
+---
+title: Products
+description: Manage products and pricing
+---
+
+## Overview
+
+Products represent the items you sell through Polar. They can be one-time purchases or recurring subscriptions, with flexible pricing options including fixed, custom (pay-what-you-want), free, seat-based, and metered billing.
+
+## The Product Object
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the product
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  The name of the product (3-64 characters)
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  The description of the product
+</ResponseField>
+
+<ResponseField name="visibility" type="enum">
+  Product visibility: `public`, `private`, or `archived`
+</ResponseField>
+
+<ResponseField name="is_recurring" type="boolean" required>
+  Whether the product is a subscription
+</ResponseField>
+
+<ResponseField name="recurring_interval" type="enum">
+  For subscriptions: `month` or `year`. `null` for one-time products
+</ResponseField>
+
+<ResponseField name="recurring_interval_count" type="integer">
+  Number of intervals between charges (e.g., 1 = monthly, 2 = every 2 months)
+</ResponseField>
+
+<ResponseField name="is_archived" type="boolean" required>
+  Whether the product is archived
+</ResponseField>
+
+<ResponseField name="organization_id" type="string" required>
+  ID of the organization owning the product
+</ResponseField>
+
+<ResponseField name="prices" type="array" required>
+  List of available prices for this product
+  
+  <Expandable title="Price Object">
+    <ResponseField name="id" type="string" required>
+      Price ID
+    </ResponseField>
+    
+    <ResponseField name="amount_type" type="enum" required>
+      Type: `fixed`, `custom`, `free`, `seat_based`, or `metered_unit`
+    </ResponseField>
+    
+    <ResponseField name="price_amount" type="integer">
+      Price in cents (for fixed pricing)
+    </ResponseField>
+    
+    <ResponseField name="price_currency" type="string" required>
+      Three-letter ISO currency code (e.g., `USD`, `EUR`)
+    </ResponseField>
+    
+    <ResponseField name="minimum_amount" type="integer">
+      Minimum amount for custom pricing (in cents)
+    </ResponseField>
+    
+    <ResponseField name="maximum_amount" type="integer">
+      Maximum amount for custom pricing (in cents)
+    </ResponseField>
+    
+    <ResponseField name="preset_amount" type="integer">
+      Default amount shown for custom pricing (in cents)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="benefits" type="array" required>
+  List of benefits granted by this product
+</ResponseField>
+
+<ResponseField name="medias" type="array">
+  List of media files (images) associated with the product
+</ResponseField>
+
+<ResponseField name="attached_custom_fields" type="array">
+  Custom fields attached to the product
+</ResponseField>
+
+<ResponseField name="metadata" type="object">
+  Custom metadata key-value pairs
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  Timestamp of when the product was created
+</ResponseField>
+
+<ResponseField name="updated_at" type="string" required>
+  Timestamp of when the product was last updated
+</ResponseField>
+
+---
+
+## List Products
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/products" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+```python Python
+from polar_sdk import Polar
+
+client = Polar(access_token="polar_pat_...")
+products = client.products.list()
+```
+
+```typescript TypeScript
+import { Polar } from '@polar-sh/sdk';
+
+const polar = new Polar({
+  accessToken: 'polar_pat_...'
+});
+
+const products = await polar.products.list();
+```
+</CodeGroup>
+
+### Query Parameters
+
+<ParamField query="page" type="integer" default="1">
+  Page number
+</ParamField>
+
+<ParamField query="limit" type="integer" default="20">
+  Number of items per page (max 100)
+</ParamField>
+
+<ParamField query="organization_id" type="string">
+  Filter by organization ID
+</ParamField>
+
+<ParamField query="id" type="string">
+  Filter by product ID(s). Supports multiple values
+</ParamField>
+
+<ParamField query="query" type="string">
+  Filter by product name
+</ParamField>
+
+<ParamField query="is_archived" type="boolean">
+  Filter archived products
+</ParamField>
+
+<ParamField query="is_recurring" type="boolean">
+  Filter by recurring (subscriptions) vs one-time products
+</ParamField>
+
+<ParamField query="benefit_id" type="string">
+  Filter products granting a specific benefit
+</ParamField>
+
+<ParamField query="visibility" type="array">
+  Filter by visibility: `public`, `private`
+</ParamField>
+
+<ParamField query="sorting" type="array" default="-created_at">
+  Sort by: `created_at`, `name`, `-created_at`, `-name`
+</ParamField>
+
+<ParamField query="metadata" type="object">
+  Filter by metadata (e.g., `metadata.key=value`)
+</ParamField>
+
+### Response
+
+<ResponseField name="items" type="array" required>
+  Array of product objects
+</ResponseField>
+
+<ResponseField name="pagination" type="object" required>
+  <Expandable>
+    <ResponseField name="total_count" type="integer">
+      Total number of products
+    </ResponseField>
+    <ResponseField name="page" type="integer">
+      Current page number
+    </ResponseField>
+    <ResponseField name="page_size" type="integer">
+      Items per page
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+---
+
+## Get Product
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/products/{id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+```python Python
+product = client.products.get(id="prod_123")
+```
+
+```typescript TypeScript
+const product = await polar.products.get({ id: 'prod_123' });
+```
+</CodeGroup>
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Product ID
+</ParamField>
+
+### Response
+
+Returns a product object.
+
+### Errors
+
+<ResponseField name="404" type="Not Found">
+  Product not found
+</ResponseField>
+
+---
+
+## Create Product
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/products" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Premium Plan",
+    "description": "Full access to all features",
+    "visibility": "public",
+    "recurring_interval": "month",
+    "recurring_interval_count": 1,
+    "prices": [
+      {
+        "amount_type": "fixed",
+        "price_amount": 2999,
+        "price_currency": "USD"
+      }
+    ],
+    "organization_id": "org_123"
+  }'
+```
+
+```python Python
+product = client.products.create(
+    name="Premium Plan",
+    description="Full access to all features",
+    visibility="public",
+    recurring_interval="month",
+    recurring_interval_count=1,
+    prices=[
+        {
+            "amount_type": "fixed",
+            "price_amount": 2999,
+            "price_currency": "USD"
+        }
+    ],
+    organization_id="org_123"
+)
+```
+
+```typescript TypeScript
+const product = await polar.products.create({
+  name: 'Premium Plan',
+  description: 'Full access to all features',
+  visibility: 'public',
+  recurringInterval: 'month',
+  recurringIntervalCount: 1,
+  prices: [
+    {
+      amountType: 'fixed',
+      priceAmount: 2999,
+      priceCurrency: 'USD'
+    }
+  ],
+  organizationId: 'org_123'
+});
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="name" type="string" required>
+  Product name (3-64 characters)
+</ParamField>
+
+<ParamField body="description" type="string">
+  Product description
+</ParamField>
+
+<ParamField body="visibility" type="enum" default="public">
+  Product visibility: `public` or `private`
+</ParamField>
+
+<ParamField body="recurring_interval" type="enum">
+  For subscriptions: `month` or `year`. Omit or set to `null` for one-time products
+</ParamField>
+
+<ParamField body="recurring_interval_count" type="integer" default="1">
+  Number of intervals (1-999). E.g., 1 = monthly, 2 = every 2 months
+</ParamField>
+
+<ParamField body="prices" type="array" required>
+  List of prices. Must include at least one price.
+  
+  <Expandable title="Fixed Price">
+    <ParamField body="amount_type" type="literal" required>
+      Set to `"fixed"`
+    </ParamField>
+    <ParamField body="price_amount" type="integer" required>
+      Price in cents (50-99999999)
+    </ParamField>
+    <ParamField body="price_currency" type="string" default="USD">
+      Currency code (USD, EUR, etc.)
+    </ParamField>
+  </Expandable>
+  
+  <Expandable title="Custom Price (Pay What You Want)">
+    <ParamField body="amount_type" type="literal" required>
+      Set to `"custom"`
+    </ParamField>
+    <ParamField body="minimum_amount" type="integer" default="50">
+      Minimum price in cents (0 for free, or ≥50)
+    </ParamField>
+    <ParamField body="maximum_amount" type="integer">
+      Maximum price in cents
+    </ParamField>
+    <ParamField body="preset_amount" type="integer">
+      Default price shown to customer (in cents)
+    </ParamField>
+    <ParamField body="price_currency" type="string" default="USD">
+      Currency code
+    </ParamField>
+  </Expandable>
+  
+  <Expandable title="Free Price">
+    <ParamField body="amount_type" type="literal" required>
+      Set to `"free"`
+    </ParamField>
+    <ParamField body="price_currency" type="string" default="USD">
+      Currency code
+    </ParamField>
+  </Expandable>
+  
+  <Expandable title="Seat-Based Price">
+    <ParamField body="amount_type" type="literal" required>
+      Set to `"seat_based"`
+    </ParamField>
+    <ParamField body="seat_tiers" type="array" required>
+      Array of pricing tiers
+      <ParamField body="min_seats" type="integer" required>
+        Minimum seats (≥1)
+      </ParamField>
+      <ParamField body="max_seats" type="integer">
+        Maximum seats (null for unlimited)
+      </ParamField>
+      <ParamField body="price_per_seat" type="integer" required>
+        Price per seat in cents
+      </ParamField>
+    </ParamField>
+    <ParamField body="price_currency" type="string" default="USD">
+      Currency code
+    </ParamField>
+  </Expandable>
+  
+  <Expandable title="Metered Unit Price">
+    <ParamField body="amount_type" type="literal" required>
+      Set to `"metered_unit"`
+    </ParamField>
+    <ParamField body="meter_id" type="string" required>
+      ID of the meter to track usage
+    </ParamField>
+    <ParamField body="unit_amount" type="decimal" required>
+      Price per unit (supports up to 12 decimal places)
+    </ParamField>
+    <ParamField body="cap_amount" type="integer">
+      Maximum amount that can be charged (in cents)
+    </ParamField>
+    <ParamField body="price_currency" type="string" default="USD">
+      Currency code
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="medias" type="array">
+  Array of file IDs for product images
+</ParamField>
+
+<ParamField body="attached_custom_fields" type="array">
+  Custom fields to attach to the product
+</ParamField>
+
+<ParamField body="organization_id" type="string">
+  Organization ID (required unless using organization token)
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Custom metadata (key-value pairs)
+</ParamField>
+
+### Response
+
+<ResponseField name="201" type="Created">
+  Returns the created product object
+</ResponseField>
+
+---
+
+## Update Product
+
+<CodeGroup>
+```bash cURL
+curl -X PATCH "https://api.polar.sh/v1/products/{id}" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Premium Plan Updated",
+    "is_archived": false
+  }'
+```
+
+```python Python
+product = client.products.update(
+    id="prod_123",
+    name="Premium Plan Updated",
+    is_archived=False
+)
+```
+
+```typescript TypeScript
+const product = await polar.products.update({
+  id: 'prod_123',
+  name: 'Premium Plan Updated',
+  isArchived: false
+});
+```
+</CodeGroup>
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Product ID
+</ParamField>
+
+### Request Body
+
+All fields are optional. Only include fields you want to update.
+
+<ParamField body="name" type="string">
+  Product name (3-64 characters)
+</ParamField>
+
+<ParamField body="description" type="string">
+  Product description
+</ParamField>
+
+<ParamField body="visibility" type="enum">
+  Product visibility: `public` or `private`
+</ParamField>
+
+<ParamField body="is_archived" type="boolean">
+  Archive or unarchive the product
+</ParamField>
+
+<ParamField body="prices" type="array">
+  Update prices. Include existing price IDs to keep them, or add new price objects
+</ParamField>
+
+<ParamField body="medias" type="array">
+  Update product images (file IDs)
+</ParamField>
+
+<ParamField body="attached_custom_fields" type="array">
+  Update attached custom fields
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Update metadata
+</ParamField>
+
+### Response
+
+Returns the updated product object.
+
+### Errors
+
+<ResponseField name="403" type="Forbidden">
+  You don't have permission to update this product
+</ResponseField>
+
+<ResponseField name="404" type="Not Found">
+  Product not found
+</ResponseField>
+
+---
+
+## Update Product Benefits
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/products/{id}/benefits" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "benefits": ["benefit_123", "benefit_456"]
+  }'
+```
+
+```python Python
+product = client.products.update_benefits(
+    id="prod_123",
+    benefits=["benefit_123", "benefit_456"]
+)
+```
+
+```typescript TypeScript
+const product = await polar.products.updateBenefits({
+  id: 'prod_123',
+  benefits: ['benefit_123', 'benefit_456']
+});
+```
+</CodeGroup>
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Product ID
+</ParamField>
+
+### Request Body
+
+<ParamField body="benefits" type="array" required>
+  Array of benefit IDs to grant with this product
+</ParamField>
+
+### Response
+
+Returns the updated product object with the new benefits.
+
+### Errors
+
+<ResponseField name="403" type="Forbidden">
+  You don't have permission to update this product
+</ResponseField>
+
+<ResponseField name="404" type="Not Found">
+  Product not found
+</ResponseField>
+
+---
+
+## Price Types
+
+### Fixed Price
+
+A standard fixed price:
+
+```json
+{
+  "amount_type": "fixed",
+  "price_amount": 2999,
+  "price_currency": "USD"
+}
+```
+
+### Custom Price (Pay What You Want)
+
+Let customers choose their price:
+
+```json
+{
+  "amount_type": "custom",
+  "minimum_amount": 500,
+  "maximum_amount": 10000,
+  "preset_amount": 2999,
+  "price_currency": "USD"
+}
+```
+
+### Free Price
+
+Completely free:
+
+```json
+{
+  "amount_type": "free",
+  "price_currency": "USD"
+}
+```
+
+### Seat-Based Price
+
+Per-seat pricing with volume tiers:
+
+```json
+{
+  "amount_type": "seat_based",
+  "seat_tiers": [
+    {
+      "min_seats": 1,
+      "max_seats": 5,
+      "price_per_seat": 1000
+    },
+    {
+      "min_seats": 6,
+      "max_seats": 20,
+      "price_per_seat": 800
+    },
+    {
+      "min_seats": 21,
+      "max_seats": null,
+      "price_per_seat": 600
+    }
+  ],
+  "price_currency": "USD"
+}
+```
+
+### Metered Unit Price
+
+Usage-based pricing:
+
+```json
+{
+  "amount_type": "metered_unit",
+  "meter_id": "meter_123",
+  "unit_amount": 0.05,
+  "cap_amount": 10000,
+  "price_currency": "USD"
+}
+```
+
+## Examples
+
+### Create a Monthly Subscription
+
+```bash
+curl -X POST "https://api.polar.sh/v1/products" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Pro Plan",
+    "description": "Professional features",
+    "recurring_interval": "month",
+    "prices": [
+      {
+        "amount_type": "fixed",
+        "price_amount": 4999,
+        "price_currency": "USD"
+      }
+    ],
+    "organization_id": "org_123"
+  }'
+```
+
+### Create a One-Time Product
+
+```bash
+curl -X POST "https://api.polar.sh/v1/products" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Lifetime Access",
+    "recurring_interval": null,
+    "prices": [
+      {
+        "amount_type": "fixed",
+        "price_amount": 29900,
+        "price_currency": "USD"
+      }
+    ],
+    "organization_id": "org_123"
+  }'
+```
+
+### Archive a Product
+
+```bash
+curl -X PATCH "https://api.polar.sh/v1/products/prod_123" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{"is_archived": true}'
+```

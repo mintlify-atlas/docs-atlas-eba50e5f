@@ -1,0 +1,563 @@
+---
+title: "Laravel Adapter"
+description: "Integrate Polar SDK into your Laravel application"
+icon: "php"
+---
+
+Integrate Polar into your Laravel application using the PHP SDK with Laravel-specific patterns and best practices.
+
+## Installation
+
+<CodeGroup>
+
+```bash Composer
+composer require polar-sh/polar-php
+```
+
+</CodeGroup>
+
+## Setup
+
+<Steps>
+
+<Step title="Configure environment variables">
+  Add your Polar credentials to `.env`:
+
+  ```bash .env
+  POLAR_ACCESS_TOKEN=your_access_token_here
+  POLAR_SERVER_URL=https://api.polar.sh
+  ```
+</Step>
+
+<Step title="Create a service provider">
+  Generate a service provider for Polar:
+
+  ```bash
+  php artisan make:provider PolarServiceProvider
+  ```
+
+  Configure the Polar client:
+
+  ```php app/Providers/PolarServiceProvider.php
+  <?php
+
+  namespace App\Providers;
+
+  use Illuminate\Support\ServiceProvider;
+  use Polar\SDK\Polar;
+
+  class PolarServiceProvider extends ServiceProvider
+  {
+      public function register(): void
+      {
+          $this->app->singleton(Polar::class, function () {
+              return Polar::builder()
+                  ->setServerURL(config('services.polar.server_url'))
+                  ->setSecurity(config('services.polar.access_token'))
+                  ->build();
+          });
+      }
+  }
+  ```
+
+  Register the provider in `config/app.php`:
+
+  ```php config/app.php
+  'providers' => [
+      // ...
+      App\Providers\PolarServiceProvider::class,
+  ],
+  ```
+</Step>
+
+<Step title="Add configuration file">
+  Create a configuration file for Polar:
+
+  ```php config/services.php
+  return [
+      // ...
+
+      'polar' => [
+          'access_token' => env('POLAR_ACCESS_TOKEN'),
+          'server_url' => env('POLAR_SERVER_URL', 'https://api.polar.sh'),
+      ],
+  ];
+  ```
+</Step>
+
+<Step title="Use in controllers">
+  Inject the Polar client into your controllers:
+
+  ```php app/Http/Controllers/ProductController.php
+  <?php
+
+  namespace App\Http\Controllers;
+
+  use Illuminate\Http\Request;
+  use Polar\SDK\Polar;
+
+  class ProductController extends Controller
+  {
+      public function __construct(
+          private Polar $polar
+      ) {}
+
+      public function index()
+      {
+          $response = $this->polar->products->search(
+              organizationId: 'your-org-id'
+          );
+
+          $products = $response->productSearchResult->items;
+
+          return view('products.index', compact('products'));
+      }
+  }
+  ```
+</Step>
+
+</Steps>
+
+## Controllers
+
+Use the Polar SDK in your controllers:
+
+```php app/Http/Controllers/CheckoutController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Polar\SDK\Polar;
+use Polar\SDK\Models\Operations\CheckoutsCreateRequest;
+
+class CheckoutController extends Controller
+{
+    public function __construct(
+        private Polar $polar
+    ) {}
+
+    public function create(Request $request)
+    {
+        $validated = $request->validate([
+            'product_id' => 'required|string',
+        ]);
+
+        $response = $this->polar->checkouts->create(
+            productId: $validated['product_id'],
+            successUrl: route('checkout.success')
+        );
+
+        return redirect($response->checkout->url);
+    }
+
+    public function success(Request $request)
+    {
+        return view('checkout.success');
+    }
+}
+```
+
+## Routes
+
+Define routes for Polar integration:
+
+```php routes/web.php
+<?php
+
+use App\Http\Controllers\CheckoutController;
+use App\Http\Controllers\ProductController;
+use Illuminate\Support\Facades\Route;
+
+Route::get('/products', [ProductController::class, 'index'])
+    ->name('products.index');
+
+Route::get('/products/{id}', [ProductController::class, 'show'])
+    ->name('products.show');
+
+Route::post('/checkout', [CheckoutController::class, 'create'])
+    ->name('checkout.create');
+
+Route::get('/checkout/success', [CheckoutController::class, 'success'])
+    ->name('checkout.success');
+```
+
+## Webhooks
+
+Handle Polar webhooks with a dedicated controller:
+
+```php app/Http/Controllers/WebhookController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Polar\SDK\Polar;
+
+class WebhookController extends Controller
+{
+    public function __construct(
+        private Polar $polar
+    ) {}
+
+    public function handle(Request $request)
+    {
+        $signature = $request->header('webhook-signature');
+        $payload = $request->getContent();
+
+        if (!$signature) {
+            return response()->json(['error' => 'Missing signature'], 401);
+        }
+
+        try {
+            $event = $this->polar->webhooks->validatePayload(
+                webhookSignatureHeader: $signature,
+                payload: $payload
+            );
+
+            // Handle the webhook event
+            $this->handleWebhookEvent($event);
+
+            return response()->json(['received' => true]);
+        } catch (\Exception $e) {
+            Log::error('Webhook validation failed', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json(['error' => 'Invalid signature'], 401);
+        }
+    }
+
+    private function handleWebhookEvent($event): void
+    {
+        match ($event->type) {
+            'checkout.completed' => $this->handleCheckoutCompleted($event->data),
+            'subscription.created' => $this->handleSubscriptionCreated($event->data),
+            'subscription.cancelled' => $this->handleSubscriptionCancelled($event->data),
+            default => Log::info('Unhandled webhook event', ['type' => $event->type]),
+        };
+    }
+
+    private function handleCheckoutCompleted($data): void
+    {
+        Log::info('Checkout completed', ['data' => $data]);
+        // Add your logic here
+    }
+
+    private function handleSubscriptionCreated($data): void
+    {
+        Log::info('Subscription created', ['data' => $data]);
+        // Add your logic here
+    }
+
+    private function handleSubscriptionCancelled($data): void
+    {
+        Log::info('Subscription cancelled', ['data' => $data]);
+        // Add your logic here
+    }
+}
+```
+
+Exclude webhook routes from CSRF protection:
+
+```php app/Http/Middleware/VerifyCsrfToken.php
+<?php
+
+namespace App\Http\Middleware;
+
+use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken as Middleware;
+
+class VerifyCsrfToken extends Middleware
+{
+    protected $except = [
+        'webhooks/polar',
+    ];
+}
+```
+
+Add the webhook route:
+
+```php routes/web.php
+Route::post('/webhooks/polar', [WebhookController::class, 'handle']);
+```
+
+## Service Classes
+
+Create service classes for better organization:
+
+```php app/Services/PolarService.php
+<?php
+
+namespace App\Services;
+
+use Polar\SDK\Polar;
+use Polar\SDK\Models\Components\Product;
+
+class PolarService
+{
+    public function __construct(
+        private Polar $polar
+    ) {}
+
+    public function getProducts(): array
+    {
+        $response = $this->polar->products->search(
+            organizationId: config('services.polar.organization_id')
+        );
+
+        return $response->productSearchResult->items;
+    }
+
+    public function getProduct(string $id): ?Product
+    {
+        try {
+            $response = $this->polar->products->get(id: $id);
+            return $response->product;
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
+    public function createCheckout(string $productId, ?string $customerEmail = null): string
+    {
+        $response = $this->polar->checkouts->create(
+            productId: $productId,
+            customerEmail: $customerEmail,
+            successUrl: route('checkout.success')
+        );
+
+        return $response->checkout->url;
+    }
+
+    public function getCustomerOrders(string $customerId): array
+    {
+        $response = $this->polar->orders->list(
+            customerId: $customerId
+        );
+
+        return $response->orderSearchResult->items;
+    }
+}
+```
+
+Use the service in controllers:
+
+```php app/Http/Controllers/ProductController.php
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Services\PolarService;
+
+class ProductController extends Controller
+{
+    public function __construct(
+        private PolarService $polarService
+    ) {}
+
+    public function index()
+    {
+        $products = $this->polarService->getProducts();
+        return view('products.index', compact('products'));
+    }
+
+    public function show(string $id)
+    {
+        $product = $this->polarService->getProduct($id);
+
+        if (!$product) {
+            abort(404, 'Product not found');
+        }
+
+        return view('products.show', compact('product'));
+    }
+}
+```
+
+## Blade Views
+
+Display products in Blade templates:
+
+```blade resources/views/products/index.blade.php
+@extends('layouts.app')
+
+@section('content')
+<div class="container">
+    <h1>Products</h1>
+
+    <div class="row">
+        @foreach($products as $product)
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">{{ $product->name }}</h5>
+                    <p class="card-text">{{ $product->description }}</p>
+                    <a href="{{ route('products.show', $product->id) }}" class="btn btn-primary">
+                        View Details
+                    </a>
+                </div>
+            </div>
+        </div>
+        @endforeach
+    </div>
+</div>
+@endsection
+```
+
+```blade resources/views/products/show.blade.php
+@extends('layouts.app')
+
+@section('content')
+<div class="container">
+    <h1>{{ $product->name }}</h1>
+    <p>{{ $product->description }}</p>
+
+    <form method="POST" action="{{ route('checkout.create') }}">
+        @csrf
+        <input type="hidden" name="product_id" value="{{ $product->id }}">
+        <button type="submit" class="btn btn-success">Buy Now</button>
+    </form>
+</div>
+@endsection
+```
+
+## Middleware
+
+Create middleware for customer authentication:
+
+```php app/Http/Middleware/EnsurePolarCustomer.php
+<?php
+
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+use Polar\SDK\Polar;
+
+class EnsurePolarCustomer
+{
+    public function __construct(
+        private Polar $polar
+    ) {}
+
+    public function handle(Request $request, Closure $next)
+    {
+        $customerId = $request->session()->get('polar_customer_id');
+
+        if (!$customerId) {
+            return redirect()->route('login');
+        }
+
+        try {
+            $response = $this->polar->customers->get(id: $customerId);
+            $request->attributes->set('polar_customer', $response->customer);
+        } catch (\Exception $e) {
+            $request->session()->forget('polar_customer_id');
+            return redirect()->route('login');
+        }
+
+        return $next($request);
+    }
+}
+```
+
+## Jobs
+
+Process webhook events asynchronously:
+
+```php app/Jobs/ProcessPolarWebhook.php
+<?php
+
+namespace App\Jobs;
+
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
+
+class ProcessPolarWebhook implements ShouldQueue
+{
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    public function __construct(
+        public string $eventType,
+        public array $eventData
+    ) {}
+
+    public function handle(): void
+    {
+        match ($this->eventType) {
+            'checkout.completed' => $this->handleCheckoutCompleted(),
+            'subscription.created' => $this->handleSubscriptionCreated(),
+            default => Log::info('Unhandled webhook event', [
+                'type' => $this->eventType,
+            ]),
+        };
+    }
+
+    private function handleCheckoutCompleted(): void
+    {
+        // Process checkout completion
+        Log::info('Processing checkout completed', $this->eventData);
+    }
+
+    private function handleSubscriptionCreated(): void
+    {
+        // Process subscription creation
+        Log::info('Processing subscription created', $this->eventData);
+    }
+}
+```
+
+Dispatch the job from the webhook controller:
+
+```php
+ProcessPolarWebhook::dispatch($event->type, (array) $event->data);
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+
+<Card title="Service layer" icon="layer-group">
+  Use service classes to encapsulate Polar logic and improve testability.
+</Card>
+
+<Card title="Queue webhooks" icon="list">
+  Process webhook events asynchronously using Laravel queues.
+</Card>
+
+<Card title="Environment config" icon="gear">
+  Store all credentials in environment variables, never in code.
+</Card>
+
+<Card title="Error handling" icon="shield">
+  Use try-catch blocks and Laravel's error handling for robustness.
+</Card>
+
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+
+<Card title="Checkout" icon="shopping-cart" href="/features/checkout">
+  Implement Polar Checkout in your Laravel app.
+</Card>
+
+<Card title="Webhooks" icon="webhook" href="/integrate/webhooks/endpoints">
+  Set up webhook handlers for real-time events.
+</Card>
+
+<Card title="PHP SDK" icon="code" href="/integrate/sdk/php">
+  Explore the full PHP SDK documentation.
+</Card>
+
+<Card title="API Reference" icon="book" href="/api-reference/introduction">
+  Browse the complete API reference.
+</Card>
+
+</CardGroup>

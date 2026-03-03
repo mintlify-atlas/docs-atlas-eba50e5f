@@ -1,0 +1,249 @@
+---
+title: Files
+description: Upload and manage files
+---
+
+## Overview
+
+Files can be used as product media (images) or downloadable benefits. Polar provides presigned URLs for secure direct upload to S3.
+
+## The File Object
+
+<ResponseField name="id" type="string" required>
+  Unique identifier
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  File name
+</ResponseField>
+
+<ResponseField name="path" type="string" required>
+  File path in storage
+</ResponseField>
+
+<ResponseField name="mime_type" type="string" required>
+  MIME type (e.g., `image/png`)
+</ResponseField>
+
+<ResponseField name="size" type="integer" required>
+  File size in bytes
+</ResponseField>
+
+<ResponseField name="upload_completed_at" type="string">
+  When upload was completed
+</ResponseField>
+
+<ResponseField name="service" type="enum" required>
+  Storage service: `product_media` or `downloadable`
+</ResponseField>
+
+<ResponseField name="organization_id" type="string" required>
+  Organization ID
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  Creation timestamp
+</ResponseField>
+
+---
+
+## List Files
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/files" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Query Parameters
+
+<ParamField query="organization_id" type="string">
+  Filter by organization
+</ParamField>
+
+<ParamField query="ids" type="array">
+  Filter by file IDs
+</ParamField>
+
+---
+
+## Create File Upload
+
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/files" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "product-image.png",
+    "mime_type": "image/png",
+    "size": 524288,
+    "service": "product_media",
+    "organization_id": "org_123"
+  }'
+```
+
+Initiates a file upload and returns a presigned URL.
+
+### Request Body
+
+<ParamField body="name" type="string" required>
+  File name
+</ParamField>
+
+<ParamField body="mime_type" type="string" required>
+  MIME type
+</ParamField>
+
+<ParamField body="size" type="integer" required>
+  File size in bytes
+</ParamField>
+
+<ParamField body="service" type="enum" required>
+  File type: `product_media` or `downloadable`
+</ParamField>
+
+<ParamField body="organization_id" type="string">
+  Organization ID (required unless using org token)
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  File ID
+</ResponseField>
+
+<ResponseField name="upload_url" type="string">
+  Presigned S3 URL for upload
+</ResponseField>
+
+<ResponseField name="upload_headers" type="object">
+  Required headers for upload
+</ResponseField>
+
+---
+
+## Complete File Upload
+
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/files/{id}/uploaded" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+Marks the file upload as complete after uploading to S3.
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  File ID
+</ParamField>
+
+---
+
+## Update File
+
+```bash cURL
+curl -X PATCH "https://api.polar.sh/v1/files/{id}" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "updated-name.png"
+  }'
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  File ID
+</ParamField>
+
+### Request Body
+
+<ParamField body="name" type="string">
+  Update file name
+</ParamField>
+
+---
+
+## Delete File
+
+```bash cURL
+curl -X DELETE "https://api.polar.sh/v1/files/{id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  File ID
+</ParamField>
+
+---
+
+## Upload Flow
+
+The complete upload process:
+
+1. **Create file upload** - Get presigned URL
+2. **Upload to S3** - Use presigned URL
+3. **Mark complete** - Notify Polar upload finished
+
+### Example
+
+```bash
+# 1. Create file upload
+RESPONSE=$(curl -X POST "https://api.polar.sh/v1/files" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "hero.png",
+    "mime_type": "image/png",
+    "size": 524288,
+    "service": "product_media",
+    "organization_id": "org_123"
+  }')
+
+FILE_ID=$(echo $RESPONSE | jq -r '.id')
+UPLOAD_URL=$(echo $RESPONSE | jq -r '.upload_url')
+
+# 2. Upload file to S3
+curl -X PUT "$UPLOAD_URL" \
+  -H "Content-Type: image/png" \
+  --data-binary "@hero.png"
+
+# 3. Mark upload complete
+curl -X POST "https://api.polar.sh/v1/files/$FILE_ID/uploaded" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+### Python Example
+
+```python
+import requests
+
+client = requests.Session()
+client.headers['Authorization'] = 'Bearer polar_pat_...'
+
+# 1. Create upload
+response = client.post('https://api.polar.sh/v1/files', json={
+    'name': 'hero.png',
+    'mime_type': 'image/png',
+    'size': 524288,
+    'service': 'product_media',
+    'organization_id': 'org_123'
+})
+data = response.json()
+
+# 2. Upload to S3
+with open('hero.png', 'rb') as f:
+    requests.put(
+        data['upload_url'],
+        data=f,
+        headers={'Content-Type': 'image/png'}
+    )
+
+# 3. Mark complete
+client.post(f"https://api.polar.sh/v1/files/{data['id']}/uploaded")
+```

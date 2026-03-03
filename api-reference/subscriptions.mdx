@@ -1,0 +1,336 @@
+---
+title: Subscriptions
+description: Manage customer subscriptions
+---
+
+## Overview
+
+Subscriptions represent recurring billing relationships with customers. They automatically renew at specified intervals until canceled.
+
+## The Subscription Object
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the subscription
+</ResponseField>
+
+<ResponseField name="status" type="enum" required>
+  Status: `incomplete`, `incomplete_expired`, `trialing`, `active`, `past_due`, `canceled`, or `unpaid`
+</ResponseField>
+
+<ResponseField name="active" type="boolean" required>
+  Whether the subscription is currently active
+</ResponseField>
+
+<ResponseField name="customer_id" type="string" required>
+  ID of the customer
+</ResponseField>
+
+<ResponseField name="product_id" type="string" required>
+  ID of the product
+</ResponseField>
+
+<ResponseField name="price_id" type="string" required>
+  ID of the price
+</ResponseField>
+
+<ResponseField name="amount" type="integer" required>
+  Subscription amount in cents
+</ResponseField>
+
+<ResponseField name="currency" type="string" required>
+  Three-letter ISO currency code
+</ResponseField>
+
+<ResponseField name="recurring_interval" type="enum" required>
+  Billing interval: `month` or `year`
+</ResponseField>
+
+<ResponseField name="current_period_start" type="string" required>
+  Start of current billing period
+</ResponseField>
+
+<ResponseField name="current_period_end" type="string" required>
+  End of current billing period
+</ResponseField>
+
+<ResponseField name="cancel_at_period_end" type="boolean" required>
+  Whether subscription will cancel at period end
+</ResponseField>
+
+<ResponseField name="canceled_at" type="string">
+  When the subscription was canceled
+</ResponseField>
+
+<ResponseField name="ended_at" type="string">
+  When the subscription ended
+</ResponseField>
+
+<ResponseField name="trial_start" type="string">
+  Trial start date
+</ResponseField>
+
+<ResponseField name="trial_end" type="string">
+  Trial end date
+</ResponseField>
+
+<ResponseField name="discount_id" type="string">
+  Applied discount ID
+</ResponseField>
+
+<ResponseField name="metadata" type="object">
+  Custom metadata
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  Creation timestamp
+</ResponseField>
+
+---
+
+## List Subscriptions
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/subscriptions" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Query Parameters
+
+<ParamField query="organization_id" type="string">
+  Filter by organization
+</ParamField>
+
+<ParamField query="product_id" type="string">
+  Filter by product
+</ParamField>
+
+<ParamField query="customer_id" type="string">
+  Filter by customer
+</ParamField>
+
+<ParamField query="external_customer_id" type="string">
+  Filter by external customer ID
+</ParamField>
+
+<ParamField query="discount_id" type="string">
+  Filter by discount
+</ParamField>
+
+<ParamField query="active" type="boolean">
+  Filter by active status
+</ParamField>
+
+<ParamField query="cancel_at_period_end" type="boolean">
+  Filter subscriptions set to cancel
+</ParamField>
+
+<ParamField query="metadata" type="object">
+  Filter by metadata
+</ParamField>
+
+---
+
+## Get Subscription
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/subscriptions/{id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Subscription ID
+</ParamField>
+
+---
+
+## Create Subscription
+
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/subscriptions" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_id": "cust_123",
+    "product_id": "prod_456",
+    "product_price_id": "price_789"
+  }'
+```
+
+<Info>
+  This endpoint only creates subscriptions for **free products**. For paid products, use the checkout flow.
+</Info>
+
+### Request Body
+
+<ParamField body="customer_id" type="string" required>
+  Customer ID
+</ParamField>
+
+<ParamField body="product_id" type="string" required>
+  Product ID (must be free)
+</ParamField>
+
+<ParamField body="product_price_id" type="string" required>
+  Price ID
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Custom metadata
+</ParamField>
+
+---
+
+## Update Subscription
+
+```bash cURL
+curl -X PATCH "https://api.polar.sh/v1/subscriptions/{id}" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product_price_id": "price_new"
+  }'
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Subscription ID
+</ParamField>
+
+### Request Body
+
+<ParamField body="product_price_id" type="string">
+  Change to a different price of the same product
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  Update metadata
+</ParamField>
+
+### Errors
+
+<ResponseField name="409" type="Conflict">
+  Subscription is locked (pending update)
+</ResponseField>
+
+---
+
+## Cancel Subscription
+
+```bash cURL
+curl -X DELETE "https://api.polar.sh/v1/subscriptions/{id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Subscription ID
+</ParamField>
+
+<Info>
+  This **revokes** the subscription immediately. The customer loses access right away and no refund is issued.
+</Info>
+
+---
+
+## Export Subscriptions
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/subscriptions/export" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Query Parameters
+
+<ParamField query="organization_id" type="string">
+  Filter by organization
+</ParamField>
+
+### Response
+
+Returns a CSV file with subscription data.
+
+---
+
+## Get Charge Preview
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/subscriptions/{id}/charge-preview" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+Get a preview of the next charge for an active subscription, including:
+- Base subscription amount
+- Metered usage charges
+- Applied discounts
+- Calculated taxes
+- Total amount
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Subscription ID
+</ParamField>
+
+### Response
+
+<ResponseField name="amount" type="integer">
+  Total amount in cents
+</ResponseField>
+
+<ResponseField name="tax_amount" type="integer">
+  Tax amount in cents
+</ResponseField>
+
+<ResponseField name="subscription_amount" type="integer">
+  Base subscription amount
+</ResponseField>
+
+<ResponseField name="metered_amounts" type="array">
+  Usage-based charges
+</ResponseField>
+
+<ResponseField name="discount_amount" type="integer">
+  Discount amount
+</ResponseField>
+
+---
+
+## Examples
+
+### Create Free Subscription
+
+```bash
+curl -X POST "https://api.polar.sh/v1/subscriptions" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer_id": "cust_abc123",
+    "product_id": "prod_free_tier",
+    "product_price_id": "price_free",
+    "metadata": {
+      "source": "referral"
+    }
+  }'
+```
+
+### Change Subscription Plan
+
+```bash
+curl -X PATCH "https://api.polar.sh/v1/subscriptions/sub_123" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product_price_id": "price_pro_annual"
+  }'
+```
+
+### Cancel Immediately
+
+```bash
+curl -X DELETE "https://api.polar.sh/v1/subscriptions/sub_123" \
+  -H "Authorization: Bearer polar_pat_..."
+```

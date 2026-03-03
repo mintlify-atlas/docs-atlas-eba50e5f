@@ -1,0 +1,163 @@
+---
+title: "PHP SDK"
+sidebarTitle: "PHP"
+icon: php
+---
+
+A fully-featured PHP SDK for the Polar API.
+
+## Installation
+
+```bash Terminal
+composer require polar-sh/sdk
+```
+
+## Quickstart
+
+```php
+declare(strict_types=1);
+
+require 'vendor/autoload.php';
+
+use Polar;
+
+$sdk = Polar\Polar::builder()
+    ->setSecurity('<YOUR_BEARER_TOKEN_HERE>')
+    ->build();
+
+$responses = $sdk->organizations->list(
+    page: 1,
+    limit: 10
+);
+
+foreach ($responses as $response) {
+    if ($response->statusCode === 200) {
+        // handle response
+        print_r($response->object);
+    }
+}
+```
+
+## Authentication
+
+The SDK requires an **Organization Access Token** for authentication. You can generate one from your organization's settings in the Polar dashboard.
+
+```php
+$sdk = Polar\Polar::builder()
+    ->setSecurity('<YOUR_BEARER_TOKEN_HERE>')
+    ->build();
+```
+
+## Common Operations
+
+### Create a Checkout Session
+
+Create a checkout session to accept payments:
+
+```php
+$sdk = Polar\Polar::builder()
+    ->setSecurity('<YOUR_BEARER_TOKEN_HERE>')
+    ->build();
+
+$response = $sdk->checkouts->create(
+    products: ['prod_xxxxxxxxxxxxx'],
+    successUrl: 'https://myapp.com/success',
+    returnUrl: 'https://myapp.com'
+);
+
+if ($response->statusCode === 200) {
+    // Redirect user to checkout URL
+    header('Location: ' . $response->object->url);
+    exit;
+}
+```
+
+### Get Customer State
+
+Retrieve a customer's active subscriptions and benefits using their external ID:
+
+```php
+$sdk = Polar\Polar::builder()
+    ->setSecurity('<YOUR_BEARER_TOKEN_HERE>')
+    ->build();
+
+$response = $sdk->customers->getStateExternal(
+    externalCustomerId: 'user_123'
+);
+
+if ($response->statusCode === 200) {
+    $grantedBenefits = $response->object->grantedBenefits;
+    $subscriptions = $response->object->subscriptions;
+    
+    foreach ($grantedBenefits as $benefit) {
+        echo $benefit->id . "\n";
+    }
+}
+```
+
+### List Products
+
+Get all products for an organization:
+
+```php
+$sdk = Polar\Polar::builder()
+    ->setSecurity('<YOUR_BEARER_TOKEN_HERE>')
+    ->build();
+
+$responses = $sdk->products->list(
+    organizationId: 'org_xxxxxxxxxxxxx',
+    page: 1,
+    limit: 10
+);
+
+foreach ($responses as $response) {
+    if ($response->statusCode === 200) {
+        foreach ($response->object->items as $product) {
+            echo $product->name . "\n";
+        }
+    }
+}
+```
+
+### Handle Pagination
+
+The SDK provides iterator support for paginated responses:
+
+```php
+$responses = $sdk->products->list(
+    page: 1,
+    limit: 10
+);
+
+foreach ($responses as $response) {
+    if ($response->statusCode === 200) {
+        // Process each page of results
+        foreach ($response->object->items as $product) {
+            echo $product->id . "\n";
+        }
+    }
+}
+```
+
+## Sandbox Environment
+
+You can configure the SDK so it hits the [sandbox environment](/integrate/sandbox) instead of the production one. You just need to set the server when building the client:
+
+```php
+$sdk = Polar\Polar::builder()
+    ->setServer('sandbox')
+    ->setSecurity('<YOUR_BEARER_TOKEN_HERE>')
+    ->build();
+```
+
+## Framework Adapters
+
+### Laravel
+
+For Laravel applications, check out our dedicated adapter:
+
+- [Laravel Adapter](/integrate/sdk/adapters/laravel)
+
+## Learn More
+
+[Read more on GitHub](https://github.com/polarsource/polar-php)

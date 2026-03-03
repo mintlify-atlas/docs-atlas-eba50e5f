@@ -1,0 +1,181 @@
+---
+title: Organizations
+description: Manage organizations
+---
+
+## Overview
+
+Organizations are the top-level entities in Polar. They own products, customers, and all other resources.
+
+## The Organization Object
+
+<ResponseField name="id" type="string" required>
+  Unique identifier
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Organization name
+</ResponseField>
+
+<ResponseField name="slug" type="string" required>
+  URL-friendly identifier
+</ResponseField>
+
+<ResponseField name="avatar_url" type="string">
+  Organization avatar URL
+</ResponseField>
+
+<ResponseField name="bio" type="string">
+  Organization bio/description
+</ResponseField>
+
+<ResponseField name="company" type="string">
+  Company name
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  Contact email
+</ResponseField>
+
+<ResponseField name="billing_email" type="string">
+  Billing email
+</ResponseField>
+
+<ResponseField name="total_monthly_spending_limit" type="integer">
+  Monthly spending limit in cents
+</ResponseField>
+
+<ResponseField name="per_user_monthly_spending_limit" type="integer">
+  Per-user spending limit in cents
+</ResponseField>
+
+<ResponseField name="payment_processor" type="enum">
+  Payment processor: `stripe`
+</ResponseField>
+
+<ResponseField name="onboarded" type="boolean" required>
+  Whether organization has completed onboarding
+</ResponseField>
+
+<ResponseField name="created_at" type="string" required>
+  Creation timestamp
+</ResponseField>
+
+---
+
+## List Organizations
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/organizations" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Query Parameters
+
+<ParamField query="slug" type="string">
+  Filter by slug
+</ParamField>
+
+---
+
+## Get Organization
+
+```bash cURL
+curl -X GET "https://api.polar.sh/v1/organizations/{id}" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Organization ID or slug
+</ParamField>
+
+---
+
+## Create Organization
+
+```bash cURL
+curl -X POST "https://api.polar.sh/v1/organizations" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Acme Corp",
+    "slug": "acme"
+  }'
+```
+
+### Request Body
+
+<ParamField body="name" type="string" required>
+  Organization name
+</ParamField>
+
+<ParamField body="slug" type="string" required>
+  URL-friendly slug
+</ParamField>
+
+---
+
+## Update Organization
+
+```bash cURL
+curl -X PATCH "https://api.polar.sh/v1/organizations/{id}" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Acme Corporation",
+    "email": "support@acme.com"
+  }'
+```
+
+### Path Parameters
+
+<ParamField path="id" type="string" required>
+  Organization ID
+</ParamField>
+
+### Request Body
+
+All fields optional.
+
+<ParamField body="name" type="string">
+  Update name
+</ParamField>
+
+<ParamField body="email" type="string">
+  Update contact email
+</ParamField>
+
+<ParamField body="billing_email" type="string">
+  Update billing email
+</ParamField>
+
+<ParamField body="bio" type="string">
+  Update bio
+</ParamField>
+
+---
+
+## Examples
+
+### Get Organization by Slug
+
+```bash
+curl -X GET "https://api.polar.sh/v1/organizations/acme" \
+  -H "Authorization: Bearer polar_pat_..."
+```
+
+### Update Organization Details
+
+```bash
+curl -X PATCH "https://api.polar.sh/v1/organizations/org_123" \
+  -H "Authorization: Bearer polar_pat_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Acme Corporation",
+    "bio": "Building the future of payments",
+    "email": "hello@acme.com",
+    "billing_email": "billing@acme.com"
+  }'
+```

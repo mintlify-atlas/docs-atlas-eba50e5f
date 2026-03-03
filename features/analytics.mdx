@@ -1,0 +1,396 @@
+---
+title: Analytics and Reporting
+description: Track revenue, subscriptions, and customer metrics to understand your business performance
+---
+
+Polar provides comprehensive analytics to help you understand your revenue, customer behavior, and business performance. Access real-time data through the dashboard or via the Metrics API.
+
+## Overview
+
+Polar analytics include:
+- Revenue metrics (MRR, ARR, growth rate)
+- Subscription analytics (new, churned, upgraded)
+- Customer metrics (LTV, CAC, cohorts)
+- Product performance
+- Checkout conversion tracking
+
+<Note>
+All analytics are calculated in real-time and include historical data from the beginning of your account.
+</Note>
+
+## Dashboard Analytics
+
+Access analytics in your dashboard at **Dashboard** > **Analytics**.
+
+### Time Period Selection
+
+Analyze data across different time periods:
+- Last 7 days
+- Last 30 days
+- Last 90 days
+- Last 12 months
+- All time
+- Custom date range
+
+### Timezone Support
+
+View metrics in your preferred timezone:
+
+```typescript
+const metrics = await polar.metrics.get({
+  startDate: '2024-01-01',
+  endDate: '2024-12-31',
+  timezone: 'America/New_York',
+  interval: 'month'
+});
+```
+
+## Available Metrics
+
+### Revenue Metrics
+
+<CardGroup cols={2}>
+  <Card title="Monthly Recurring Revenue" icon="chart-line">
+    Current MRR from active subscriptions
+  </Card>
+  
+  <Card title="Annual Recurring Revenue" icon="chart-line-up">
+    Annualized recurring revenue (MRR × 12)
+  </Card>
+  
+  <Card title="Revenue Growth" icon="arrow-trend-up">
+    Month-over-month and year-over-year growth rates
+  </Card>
+  
+  <Card title="One-Time Revenue" icon="dollar-sign">
+    Revenue from non-recurring purchases
+  </Card>
+</CardGroup>
+
+### Subscription Metrics
+
+```json Subscription Metrics
+{
+  "new_subscriptions": 45,
+  "churned_subscriptions": 5,
+  "active_subscriptions": 150,
+  "churn_rate": 3.3,
+  "subscription_mrr": 15000
+}
+```
+
+### Customer Metrics
+
+- **New Customers**: First-time purchasers in period
+- **Active Customers**: Customers with active subscriptions
+- **Customer Lifetime Value**: Average revenue per customer
+- **Customer Retention**: Percentage of customers retained
+
+### Product Performance
+
+Track performance by product:
+- Revenue per product
+- Subscription count per product
+- Conversion rate per product
+- Most popular products
+
+## Metrics API
+
+Programmatically access metrics:
+
+```typescript
+import { Polar } from '@polar-sh/sdk';
+
+const polar = new Polar({ accessToken: 'YOUR_TOKEN' });
+
+const metrics = await polar.metrics.get({
+  startDate: '2024-01-01',
+  endDate: '2024-12-31',
+  interval: 'month',
+  organizationId: ['org_xxx'],
+  metrics: [
+    'subscription_mrr',
+    'new_subscriptions',
+    'active_subscriptions',
+    'revenue'
+  ]
+});
+```
+
+### Supported Intervals
+
+- `hour`: Hourly data points
+- `day`: Daily data points
+- `week`: Weekly aggregation
+- `month`: Monthly aggregation
+- `year`: Yearly aggregation
+
+<Warning>
+**Interval Limits**: Smaller intervals require shorter date ranges to prevent excessive data points. Use the `/metrics/limits` endpoint to check constraints.
+</Warning>
+
+### Filtering Options
+
+Filter metrics by:
+
+```typescript
+const metrics = await polar.metrics.get({
+  startDate: '2024-01-01',
+  endDate: '2024-12-31',
+  interval: 'month',
+  
+  // Filter by organization
+  organizationId: ['org_xxx'],
+  
+  // Filter by product
+  productId: ['product_xxx', 'product_yyy'],
+  
+  // Filter by billing type
+  billingType: ['recurring'],  // or 'one_time'
+  
+  // Filter by customer
+  customerId: ['customer_xxx']
+});
+```
+
+## Metric Definitions
+
+### Subscription MRR
+
+Monthly Recurring Revenue from active subscriptions:
+- Includes active and trialing subscriptions
+- Excludes canceled subscriptions (even if still in grace period)
+- Normalized to monthly values (annual → monthly / 12)
+
+```json MRR Calculation
+{
+  "period": "2024-01",
+  "subscription_mrr": 15000,
+  "breakdown": {
+    "monthly_plans": 10000,
+    "annual_plans": 5000  // (60000 annual / 12)
+  }
+}
+```
+
+### New Subscriptions
+
+Count of subscriptions that started in the period:
+- First subscriptions for customers
+- Resubscriptions after cancellation
+- Does not include trial starts (counted at conversion)
+
+### Churned Subscriptions
+
+Subscriptions that ended in the period:
+- Voluntary cancellations
+- Payment failures after retry period
+- Excluded: Upgrades/downgrades (counted as updates)
+
+### Churn Rate
+
+Percentage of subscriptions lost:
+
+```
+Churn Rate = (Churned Subscriptions / Active Subscriptions at Start) × 100
+```
+
+### Revenue
+
+Total revenue received in the period:
+- Successful payments (orders)
+- Subscription charges
+- One-time purchases
+- Excludes refunds (tracked separately)
+
+```json Revenue Breakdown
+{
+  "period": "2024-01",
+  "total_revenue": 25000,
+  "subscription_revenue": 18000,
+  "one_time_revenue": 7000,
+  "currency": "usd"
+}
+```
+
+## Time Series Data
+
+Metrics return time series data:
+
+```json Time Series Response
+{
+  "periods": [
+    {
+      "timestamp": "2024-01-01T00:00:00Z",
+      "subscription_mrr": 10000,
+      "active_subscriptions": 100,
+      "revenue": 15000
+    },
+    {
+      "timestamp": "2024-02-01T00:00:00Z",
+      "subscription_mrr": 12000,
+      "active_subscriptions": 120,
+      "revenue": 18000
+    }
+  ]
+}
+```
+
+## Currency Handling
+
+All metrics are in the smallest currency unit (cents):
+
+```json
+{
+  "revenue": 150000,  // $1,500.00
+  "currency": "usd"
+}
+```
+
+### Multi-Currency
+
+For multi-currency organizations:
+- Metrics are provided per currency
+- No automatic conversion
+- Group by currency in responses
+
+```typescript
+const metrics = await polar.metrics.get({
+  startDate: '2024-01-01',
+  endDate: '2024-12-31',
+  interval: 'month'
+});
+
+// Metrics grouped by currency
+metrics.periods.forEach(period => {
+  console.log(period.currency);  // 'usd', 'eur', etc.
+  console.log(period.revenue);
+});
+```
+
+## Performance Optimization
+
+### Selective Metrics
+
+Request only needed metrics for better performance:
+
+```typescript
+const metrics = await polar.metrics.get({
+  startDate: '2024-01-01',
+  endDate: '2024-12-31',
+  interval: 'month',
+  metrics: ['subscription_mrr', 'active_subscriptions']  // Only these
+});
+```
+
+<Note>
+Omitting the `metrics` parameter returns all available metrics, which is slower for large date ranges.
+</Note>
+
+### Caching
+
+Metrics are cached for performance:
+- Recent data: 5-minute cache
+- Historical data: 1-hour cache
+- Use `Cache-Control` headers for custom caching
+
+## Exporting Data
+
+### CSV Export
+
+Export metrics data to CSV:
+
+```typescript
+const csv = await polar.metrics.export({
+  startDate: '2024-01-01',
+  endDate: '2024-12-31',
+  format: 'csv'
+});
+
+// Download CSV file
+```
+
+### Webhook Integration
+
+Receive metric updates via webhooks:
+
+```json Daily Metrics Webhook
+{
+  "type": "metrics.daily",
+  "data": {
+    "date": "2024-01-15",
+    "subscription_mrr": 15000,
+    "new_subscriptions": 5,
+    "churned_subscriptions": 1
+  }
+}
+```
+
+## Custom Reports
+
+Create custom reports by combining metrics:
+
+```typescript
+// Calculate customer acquisition cost
+const metrics = await polar.metrics.get({
+  startDate: '2024-01-01',
+  endDate: '2024-12-31',
+  metrics: ['new_customers', 'marketing_spend']
+});
+
+const cac = metrics.marketing_spend / metrics.new_customers;
+```
+
+## Cohort Analysis
+
+Track customer cohorts over time:
+
+```typescript
+const cohorts = await polar.metrics.getCohorts({
+  cohortDate: '2024-01',  // Customers acquired in Jan 2024
+  metric: 'retention',
+  periods: 6  // Track for 6 months
+});
+```
+
+```json Cohort Data
+{
+  "cohort": "2024-01",
+  "initial_size": 100,
+  "retention": [
+    {"month": 0, "retained": 100, "rate": 1.0},
+    {"month": 1, "retained": 95, "rate": 0.95},
+    {"month": 2, "retained": 90, "rate": 0.90},
+    {"month": 3, "retained": 87, "rate": 0.87}
+  ]
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Monitor MRR Trends" icon="chart-line">
+    Track month-over-month MRR growth to understand business health
+  </Card>
+  
+  <Card title="Watch Churn Rate" icon="user-xmark">
+    Keep churn below 5% monthly for healthy SaaS businesses
+  </Card>
+  
+  <Card title="Segment by Product" icon="box">
+    Analyze performance by product to identify winners
+  </Card>
+  
+  <Card title="Track Cohorts" icon="users">
+    Monitor customer retention by acquisition cohort
+  </Card>
+</CardGroup>
+
+## API Reference
+
+Access analytics data programmatically via the Polar API:
+
+- `GET /v1/metrics` - Retrieve metrics with filters
+- `GET /v1/metrics/limits` - Get account metric limits
+
+See the [API Reference](/api-reference/introduction) for more details.

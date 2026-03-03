@@ -1,0 +1,299 @@
+---
+title: "Introduction to Polar"
+description: "Open source payments infrastructure and merchant of record for developers to monetize digital products and SaaS"
+---
+
+<img
+  className="block dark:hidden"
+  src="/images/hero-light.svg"
+  alt="Polar Hero Light"
+/>
+<img
+  className="hidden dark:block"
+  src="/images/hero-dark.svg"
+  alt="Polar Hero Dark"
+/>
+
+## Focus on building, we handle the payments
+
+Polar is an open source payments infrastructure and merchant of record platform designed for developers who want to monetize digital products and SaaS without the complexity of traditional payment systems.
+
+As your merchant of record, Polar handles the entire payment infrastructure:
+- **Payment processing** with Stripe integration
+- **Tax compliance** including sales tax and VAT calculations
+- **Customer billing** with invoices and receipts
+- **Subscription management** with automated renewals
+- **Regulatory compliance** so you can focus on building
+
+## Why Polar?
+
+<CardGroup cols={2}>
+  <Card
+    title="Developer-First API"
+    icon="code"
+    href="/api-reference/introduction"
+  >
+    Full REST API with TypeScript, Python, PHP, and Go SDKs. Integrate checkout in minutes with framework adapters for Next.js, Astro, Remix, SvelteKit, and Laravel.
+  </Card>
+  <Card
+    title="Flexible Pricing Models"
+    icon="dollar-sign"
+    href="/features/products"
+  >
+    Support one-time purchases, subscriptions, pay-what-you-want, usage-based billing, and seat-based pricing. All from a single platform.
+  </Card>
+  <Card
+    title="Rich Digital Benefits"
+    icon="gift"
+    href="/features/benefits"
+  >
+    Grant benefits automatically: GitHub repository access, Discord roles, license keys, file downloads, meter credits, and custom integrations.
+  </Card>
+  <Card
+    title="Merchant of Record"
+    icon="shield-check"
+    href="/merchant-of-record/introduction"
+  >
+    We handle sales tax, VAT, compliance, and regulatory requirements across all supported countries. You receive clean payouts.
+  </Card>
+  <Card
+    title="Usage-Based Billing"
+    icon="chart-line"
+    href="/features/usage-based-billing/introduction"
+  >
+    Ingest events, define meters, and bill customers based on actual usage. Perfect for API platforms and consumption-based pricing.
+  </Card>
+  <Card
+    title="Customer Portal"
+    icon="users"
+    href="/features/customer-portal"
+  >
+    Built-in customer portal for subscription management, payment methods, invoices, and benefit access. Fully brandable.
+  </Card>
+  <Card
+    title="Real-Time Webhooks"
+    icon="webhook"
+    href="/integrate/webhooks/endpoints"
+  >
+    Comprehensive webhook events for all checkout, subscription, and order lifecycle changes. Build powerful automations.
+  </Card>
+  <Card
+    title="Open Source"
+    icon="github"
+    href="https://github.com/polarsource/polar"
+  >
+    Fully open source with Apache 2.0 license. Self-hostable, transparent, and community-driven development on GitHub.
+  </Card>
+</CardGroup>
+
+## Quick Example
+
+Create a checkout session with our API:
+
+<CodeGroup>
+```typescript TypeScript
+import { Polar } from "@polar-sh/sdk";
+
+const polar = new Polar({
+  accessToken: process.env.POLAR_ACCESS_TOKEN,
+});
+
+const checkout = await polar.checkouts.create({
+  productPriceId: "prp_...",
+  successUrl: "https://example.com/success",
+});
+
+console.log(checkout.url); // Send customer to this URL
+```
+
+```python Python
+from polar_sdk import Polar
+
+polar = Polar(
+    access_token=os.environ["POLAR_ACCESS_TOKEN"]
+)
+
+checkout = polar.checkouts.create(
+    product_price_id="prp_...",
+    success_url="https://example.com/success",
+)
+
+print(checkout.url)  # Send customer to this URL
+```
+
+```bash cURL
+curl https://api.polar.sh/v1/checkouts \
+  -X POST \
+  -H "Authorization: Bearer $POLAR_ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "product_price_id": "prp_...",
+    "success_url": "https://example.com/success"
+  }'
+```
+</CodeGroup>
+
+## Core Concepts
+
+### Products & Prices
+
+Products represent what you're selling. Each product can have multiple prices with different billing models:
+
+- **One-time purchases** - Single payment for lifetime access
+- **Subscriptions** - Recurring billing (monthly/yearly)
+- **Pay-what-you-want** - Customer chooses the price
+- **Usage-based** - Bill based on meter consumption
+- **Seat-based** - Price per seat/user
+
+[Learn more about Products →](/features/products)
+
+### Checkouts
+
+Checkouts are hosted payment pages where customers complete purchases. Polar handles the entire checkout flow, including:
+
+- Payment collection via Stripe
+- Tax calculation and collection
+- Customer account creation
+- Benefit fulfillment
+- Receipt generation
+
+[Learn more about Checkout →](/features/checkout)
+
+### Benefits
+
+Benefits are what customers receive after purchasing. Polar supports:
+
+- **GitHub Repository Access** - Automatic invites to private repos
+- **Discord Roles** - Auto-assigned roles in your Discord server
+- **License Keys** - Generate and manage license keys
+- **File Downloads** - Secure download links for digital files
+- **Meter Credits** - Usage allowances for consumption billing
+- **Custom Benefits** - Webhook-based integrations for any benefit
+
+[Learn more about Benefits →](/features/benefits)
+
+### Subscriptions & Orders
+
+- **Subscriptions** are recurring purchases that renew automatically
+- **Orders** represent completed transactions (one-time or subscription)
+
+Polar handles subscription renewals, prorations for upgrades/downgrades, dunning for failed payments, and automatic benefit grants/revocations.
+
+[Learn more about Subscriptions →](/features/subscriptions)
+
+## Pricing
+
+Polar charges a simple percentage fee on successful transactions:
+
+**4% + 40¢ per transaction**
+
+- No monthly fees
+- No setup costs
+- Additional Stripe fees apply
+
+[View detailed fee structure →](/merchant-of-record/fees)
+
+## Architecture
+
+Polar is built as a modern, scalable monorepo:
+
+- **Backend**: FastAPI (Python) with PostgreSQL, Redis, and Dramatiq workers
+- **Frontend**: Next.js with TypeScript, TanStack Query, and Tailwind CSS
+- **Infrastructure**: Stripe for payment processing, S3 for file storage
+
+<Note>
+  The entire codebase is open source and available on [GitHub](https://github.com/polarsource/polar). You can self-host Polar or use our hosted service at [polar.sh](https://polar.sh).
+</Note>
+
+## Integration Paths
+
+Choose the integration approach that fits your needs:
+
+<Steps>
+  <Step title="Checkout Links">
+    Create checkout links in the dashboard and share them directly. Perfect for simple setups with no backend required.
+    
+    [View Checkout Links →](/features/checkout)
+  </Step>
+  <Step title="API Integration">
+    Use our REST API to create checkouts programmatically. Full control over the customer experience with webhook events.
+    
+    [View API Reference →](/api-reference/introduction)
+  </Step>
+  <Step title="SDK Integration">
+    Install our TypeScript, Python, PHP, or Go SDK for type-safe API integration with framework adapters.
+    
+    [View SDK Docs →](/integrate/sdk/typescript)
+  </Step>
+  <Step title="Embedded Checkout">
+    Embed the checkout flow directly in your application using our JavaScript SDK.
+    
+    [View Checkout SDK →](/integrate/sdk/typescript)
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Quickstart Guide"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Get from zero to first checkout in under 5 minutes
+  </Card>
+  <Card
+    title="Migrate to Polar"
+    icon="arrow-right-arrow-left"
+    href="/migrate"
+  >
+    Moving from another platform? We'll help you migrate
+  </Card>
+  <Card
+    title="API Reference"
+    icon="book"
+    href="/api-reference/introduction"
+  >
+    Explore the complete API documentation
+  </Card>
+  <Card
+    title="Integration Guides"
+    icon="code"
+    href="/guides/introduction"
+  >
+    Framework-specific guides for Next.js, Laravel, and more
+  </Card>
+</CardGroup>
+
+## Community & Support
+
+<CardGroup cols={2}>
+  <Card
+    title="GitHub Discussions"
+    icon="github"
+    href="https://github.com/polarsource/polar/discussions"
+  >
+    Ask questions and share feedback
+  </Card>
+  <Card
+    title="Discord Community"
+    icon="discord"
+    href="https://discord.gg/Pnhfz3UThd"
+  >
+    Join our community of developers
+  </Card>
+  <Card
+    title="Report Issues"
+    icon="bug"
+    href="https://github.com/polarsource/polar/issues"
+  >
+    Found a bug? Let us know
+  </Card>
+  <Card
+    title="Follow Updates"
+    icon="twitter"
+    href="https://twitter.com/polar_sh"
+  >
+    Stay updated on new features
+  </Card>
+</CardGroup>

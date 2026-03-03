@@ -1,0 +1,367 @@
+---
+title: Fee Structure
+description: Understand Polar's pricing and fee breakdown
+---
+
+## Overview
+
+Polar uses a simple, transparent pricing model with no monthly fees or hidden charges. You only pay when you make money.
+
+## Platform Fee
+
+Polar charges a flat rate per transaction:
+
+<Info>
+**4% + 40¢** per successful transaction
+</Info>
+
+This covers:
+
+- Payment processing infrastructure
+- Merchant of record services
+- Tax calculation and remittance
+- Compliance and regulatory requirements
+- Invoice generation
+- Customer support
+- Platform maintenance and development
+
+### What's Included
+
+- **No Monthly Fees**: Pay only per transaction
+- **No Setup Fees**: Start selling immediately
+- **No Hidden Charges**: Transparent pricing
+- **All Features**: Access to full platform capabilities
+
+## Fee Calculation
+
+### Formula
+
+```
+Platform Fee = (Transaction Amount × 0.04) + $0.40
+```
+
+### Examples
+
+**Example 1: $10 Product**
+- Transaction Amount: $10.00
+- Platform Fee: ($10.00 × 0.04) + $0.40 = $0.80
+- Your Revenue: $10.00 - $0.80 = **$9.20**
+
+**Example 2: $50 Subscription**
+- Transaction Amount: $50.00
+- Platform Fee: ($50.00 × 0.04) + $0.40 = $2.40
+- Your Revenue: $50.00 - $2.40 = **$47.60**
+
+**Example 3: $200 License**
+- Transaction Amount: $200.00
+- Platform Fee: ($200.00 × 0.04) + $0.40 = $8.40
+- Your Revenue: $200.00 - $8.40 = **$191.60**
+
+### Fee Rounding
+
+Fees are calculated using Stripe's rounding logic:
+
+- Calculated to the cent
+- Rounded using standard rounding rules
+- Ensures consistency with payment processor
+
+## Payment Processor Fees
+
+In addition to Polar's platform fee, payment processor fees apply:
+
+### Stripe Processing Fees
+
+**Standard Rates:**
+- US cards: 2.9% + 30¢
+- International cards: 3.9% + 30¢
+- Currency conversion: +1%
+
+These fees are separate from Polar's platform fee and are set by Stripe.
+
+### Combined Fee Example
+
+For a $100 US card transaction:
+
+```
+Transaction Amount: $100.00
+Stripe Fee: ($100 × 0.029) + $0.30 = $3.20
+Polar Fee: ($100 × 0.04) + $0.40 = $4.40
+Total Fees: $7.60
+Your Revenue: $92.40 (92.4%)
+```
+
+<Note>
+Actual processor fees depend on card type, location, and payment method. Check [Stripe's pricing](https://stripe.com/pricing) for details.
+</Note>
+
+## Fee Deduction Timing
+
+### When Fees Are Charged
+
+Fees are deducted at different stages:
+
+#### Immediate (Transaction Time)
+
+1. Customer completes payment
+2. Payment processor fees deducted by Stripe
+3. Net amount credited to your Polar balance
+
+#### At Payout
+
+1. You initiate [payout](/features/finance/payouts)
+2. Platform fees calculated on gross revenue
+3. Platform fees deducted from balance
+4. Net amount transferred to your bank
+
+### Why Split Timing?
+
+This approach:
+
+- Provides accurate balance tracking
+- Enables fee credit application
+- Supports multi-currency accounting
+- Simplifies reconciliation
+
+## Fee Credits
+
+You may receive fee credits from:
+
+### Campaign Credits
+
+Referral campaigns may offer:
+
+- Reduced platform fees
+- Fixed credit amounts
+- Time-limited promotions
+
+### Credit Application
+
+Credits automatically apply:
+
+1. Payout initiated
+2. Platform fee calculated
+3. Credits applied first
+4. Remaining fees charged normally
+5. Net payout transferred
+
+### Viewing Credits
+
+Check your credit balance:
+
+- Finance dashboard
+- Account details page
+- API: `account.credit_balance`
+
+## Additional Fees
+
+### Payout Fees
+
+Standard bank transfers:
+
+- **Free** for most currencies and regions
+- Some regions may incur nominal bank fees
+- Instant payouts may have additional charges
+
+### Currency Conversion
+
+When customer currency ≠ your account currency:
+
+- Stripe's exchange rate applies
+- Typically includes ~1% spread
+- Rate determined at transaction time
+- Additional 1% fee for international cards
+
+### Refund Fees
+
+For refunded transactions:
+
+- Stripe processing fee **not refunded**
+- Polar platform fee **fully refunded**
+- Original amount returned to customer
+- Your balance debited for refund amount
+
+### Chargeback Fees
+
+If a chargeback occurs:
+
+- Stripe chargeback fee: $15
+- Deducted from your balance
+- Refunded if you win the dispute
+
+## Custom Pricing
+
+### Volume Discounts
+
+Not currently available, but we're considering volume-based pricing for high-volume sellers. Contact us to discuss your needs.
+
+### Enterprise Pricing
+
+For enterprise requirements:
+
+- Custom fee arrangements
+- Dedicated support
+- SLA guarantees
+- White-label options
+
+Contact [enterprise@polar.sh](mailto:enterprise@polar.sh) to discuss.
+
+## Fee Structure by Product Type
+
+Our fee structure applies uniformly across all product types:
+
+- **Digital Products**: 4% + 40¢
+- **Subscriptions**: 4% + 40¢ per billing cycle
+- **License Keys**: 4% + 40¢
+- **File Downloads**: 4% + 40¢
+- **Repository Access**: 4% + 40¢ per billing period
+
+## Comparing to Alternatives
+
+### Polar vs Payment Processors
+
+**Stripe alone:**
+- Fee: ~2.9% + 30¢
+- You handle: Tax, compliance, invoicing
+- Setup: Complex integration
+
+**Polar:**
+- Fee: 4% + 40¢ + processor fees
+- We handle: Everything including tax compliance
+- Setup: Minutes to start selling
+
+### Polar vs Other Platforms
+
+**Gumroad:**
+- Fee: 10% (or $10/mo + 3.5%)
+- Similar features
+
+**Paddle:**
+- Fee: 5% + 50¢ + processor fees
+- Similar merchant of record model
+
+**Polar:**
+- Fee: 4% + 40¢ + processor fees
+- Open source
+- Developer-focused
+- GitHub integration
+
+## Transparency
+
+### Fee Breakdown
+
+Every payout includes:
+
+- Detailed fee breakdown
+- Transaction-by-transaction accounting
+- Platform fee calculation
+- Processor fee totals
+- Net payout amount
+
+### Downloadable Reports
+
+- CSV exports of all transactions
+- Fee detail per transaction
+- Payout summaries
+- Historical data
+
+### API Access
+
+Programmatically access:
+
+```javascript
+const estimate = await polar.payouts.estimate({
+  account_id: accountId
+});
+
+console.log(`Gross: $${estimate.gross_amount / 100}`);
+console.log(`Fees: $${estimate.fees_amount / 100}`);
+console.log(`Net: $${estimate.net_amount / 100}`);
+```
+
+## Tax Implications
+
+### For Sellers
+
+Polar's fees are:
+
+- Business expenses
+- Tax-deductible in most jurisdictions
+- Documented in payout invoices
+- Reportable on your tax returns
+
+<Warning>
+Consult a qualified tax advisor about your specific tax obligations. We provide documentation but not tax advice.
+</Warning>
+
+### Fee Invoices
+
+Reverse invoices available:
+
+- Platform fees itemized
+- Legal entity details
+- Tax documentation
+- Downloadable PDF
+
+See [payout invoices](/features/finance/payouts#payout-invoices) for details.
+
+## Fee Configuration
+
+### Account-Specific Fees
+
+Some accounts may have custom fee arrangements:
+
+- Campaign-based fee reductions
+- Promotional pricing
+- Legacy pricing grandfathering
+
+Your specific fee rate is shown in:
+
+- Account settings
+- Payout estimates
+- Transaction details
+
+### Checking Your Rate
+
+```javascript
+const account = await polar.accounts.get(accountId);
+const [basisPoints, fixed] = account.platform_fee;
+console.log(`Your rate: ${basisPoints/100}% + ${fixed}¢`);
+```
+
+## Questions About Fees
+
+### Why the fixed fee?
+
+The 40¢ fixed fee covers:
+
+- Payment processing base cost
+- Tax calculation API calls
+- Database transactions
+- Infrastructure costs
+- Support and compliance overhead
+
+### Can fees be waived?
+
+Generally no, but exceptions for:
+
+- Charity/non-profit projects (case by case)
+- Open source maintainers (campaign credits)
+- Platform development contributors
+
+Contact us to discuss your situation.
+
+### How do fees compare internationally?
+
+Our 4% + 40¢ rate is:
+
+- Competitive globally
+- Same rate worldwide
+- No regional surcharges
+- Transparent and predictable
+
+## Next Steps
+
+- Review [Merchant of Record services](/merchant-of-record/introduction)
+- Set up your [Financial Account](/features/finance/accounts)
+- Understand [Balance Tracking](/features/finance/balance)
+- Learn about [Payout Processing](/features/finance/payouts)

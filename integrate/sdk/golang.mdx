@@ -1,0 +1,240 @@
+---
+title: "Go SDK"
+sidebarTitle: "Go"
+icon: golang
+description: SDK for Golang
+---
+
+## Examples
+
+- [With Go (Gin)](https://github.com/polarsource/examples/tree/main/with-golang-gin)
+
+## Installation
+
+```bash
+go get github.com/polarsource/polar-go
+```
+
+## Quickstart
+
+```go icon="golang" main.go
+package main
+
+import (
+	"context"
+	polargo "github.com/polarsource/polar-go"
+	"log"
+	"os"
+)
+
+func main() {
+	ctx := context.Background()
+
+	s := polargo.New(
+		polargo.WithSecurity(os.Getenv("POLAR_ACCESS_TOKEN")),
+	)
+
+	res, err := s.Organizations.List(ctx, nil, polargo.Pointer[int64](1), polargo.Pointer[int64](10), nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if res.ListResourceOrganization != nil {
+		for {
+			// handle items
+			for _, org := range res.ListResourceOrganization.Items {
+				log.Println(org.Name)
+			}
+
+			res, err = res.Next()
+
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			if res == nil {
+				break
+			}
+		}
+	}
+}
+```
+
+## Authentication
+
+The SDK requires an **Organization Access Token** for authentication. You can generate one from your organization's settings in the Polar dashboard.
+
+```go
+import polargo "github.com/polarsource/polar-go"
+
+s := polargo.New(
+	polargo.WithSecurity(os.Getenv("POLAR_ACCESS_TOKEN")),
+)
+```
+
+## Common Operations
+
+### Create a Checkout Session
+
+Create a checkout session to accept payments:
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	polargo "github.com/polarsource/polar-go"
+	polargocomponents "github.com/polarsource/polar-go/models/components"
+	"os"
+)
+
+func main() {
+	ctx := context.Background()
+
+	s := polargo.New(
+		polargo.WithSecurity(os.Getenv("POLAR_ACCESS_TOKEN")),
+	)
+
+	checkout, err := s.Checkouts.Create(ctx, polargocomponents.CheckoutCreateInput{
+		Products: []string{"prod_xxxxxxxxxxxxx"},
+		SuccessURL: polargo.Pointer("https://myapp.com/success"),
+		ReturnURL: polargo.Pointer("https://myapp.com"),
+	})
+
+	if err != nil {
+		panic(err)
+	}
+
+	// Redirect user to checkout.URL
+	fmt.Println(checkout.URL)
+}
+```
+
+### Get Customer State
+
+Retrieve a customer's active subscriptions and benefits using their external ID:
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	polargo "github.com/polarsource/polar-go"
+	"os"
+)
+
+func main() {
+	ctx := context.Background()
+
+	s := polargo.New(
+		polargo.WithSecurity(os.Getenv("POLAR_ACCESS_TOKEN")),
+	)
+
+	customerState, err := s.Customers.GetStateExternal(ctx, "user_123")
+
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("Granted Benefits:", customerState.GrantedBenefits)
+	fmt.Println("Subscriptions:", customerState.Subscriptions)
+}
+```
+
+### List Products
+
+Get all products for an organization:
+
+```go
+package main
+
+import (
+	"context"
+	"log"
+	polargo "github.com/polarsource/polar-go"
+	"os"
+)
+
+func main() {
+	ctx := context.Background()
+
+	s := polargo.New(
+		polargo.WithSecurity(os.Getenv("POLAR_ACCESS_TOKEN")),
+	)
+
+	organizationID := "org_xxxxxxxxxxxxx"
+	res, err := s.Products.List(
+		ctx,
+		polargo.Pointer(organizationID),
+		polargo.Pointer[int64](1),
+		polargo.Pointer[int64](10),
+	)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if res.ListResourceProduct != nil {
+		for {
+			// handle items
+			for _, product := range res.ListResourceProduct.Items {
+				log.Println(product.Name)
+			}
+
+			res, err = res.Next()
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			if res == nil {
+				break
+			}
+		}
+	}
+}
+```
+
+### Handle Pagination
+
+The SDK provides automatic pagination support:
+
+```go
+res, err := s.Products.List(ctx, nil, polargo.Pointer[int64](1), polargo.Pointer[int64](10))
+if err != nil {
+	log.Fatal(err)
+}
+
+if res.ListResourceProduct != nil {
+	for {
+		// Process each page of results
+		for _, product := range res.ListResourceProduct.Items {
+			log.Println(product.ID)
+		}
+
+		res, err = res.Next()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if res == nil {
+			break
+		}
+	}
+}
+```
+
+## Sandbox Environment
+
+For testing, use the sandbox environment:
+
+```go
+s := polargo.New(
+	polargo.WithSecurity(os.Getenv("POLAR_ACCESS_TOKEN")),
+	polargo.WithServerURL("https://sandbox-api.polar.sh"),
+)
+```
+
+## Learn More
+
+[Read more on GitHub](https://github.com/polarsource/polar-go)

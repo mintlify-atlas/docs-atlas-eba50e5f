@@ -1,0 +1,349 @@
+---
+title: Webhook Events
+description: Complete reference of all webhook events available in Polar
+---
+
+Polar sends webhook events for all key actions in your organization. Each event includes a `type` field, a `timestamp`, and a `data` object containing the relevant resource.
+
+## Event Structure
+
+All webhook events follow this structure:
+
+```json
+{
+  "type": "order.paid",
+  "timestamp": "2024-03-15T10:30:00Z",
+  "data": {
+    // Resource object (Order, Subscription, Customer, etc.)
+  }
+}
+```
+
+## Checkout Events
+
+### `checkout.created`
+
+Sent when a new checkout session is created.
+
+**Use cases:** Track checkout funnel, initialize custom analytics
+
+### `checkout.updated`
+
+Sent when a checkout session is updated (e.g., customer information added, payment method updated).
+
+**Use cases:** Monitor checkout progress, sync state with your system
+
+### `checkout.expired`
+
+Sent when a checkout session expires without being completed.
+
+**Use cases:** Send abandonment emails, track conversion metrics
+
+<Warning>
+  Checkout expiration is based on the session's expiration time. Use this to send reminder emails or trigger remarketing campaigns.
+</Warning>
+
+## Customer Events
+
+### `customer.created`
+
+Sent when a new customer is created, either after a successful checkout or programmatically via the API.
+
+**Use cases:** Send welcome emails, create user accounts, sync to CRM
+
+### `customer.updated`
+
+Sent when customer details are updated (name, email, metadata, etc.).
+
+<Note>
+  This event fires for **profile changes only**. For subscription or benefit state changes, use `customer.state_changed`.
+</Note>
+
+### `customer.deleted`
+
+Sent when a customer is permanently deleted.
+
+**Use cases:** Remove from CRM, clean up associated data, revoke access
+
+### `customer.state_changed`
+
+Sent when a customer's subscription or benefit state changes. This is the most comprehensive customer event.
+
+**Triggered by:**
+- Customer creation, update, or deletion
+- Subscription creation or status change
+- Benefit grant or revocation
+
+**Use cases:** Sync customer state to your database, update access permissions, trigger workflows
+
+**Example payload:**
+```json
+{
+  "type": "customer.state_changed",
+  "timestamp": "2024-03-15T10:30:00Z",
+  "data": {
+    "customer": {
+      "id": "cus_...",
+      "email": "customer@example.com"
+    },
+    "subscriptions": [
+      {
+        "id": "sub_...",
+        "status": "active",
+        "product": {...}
+      }
+    ],
+    "active_benefit_ids": ["ben_...", "ben_..."]
+  }
+}
+```
+
+## Customer Seat Events
+
+Customer seats enable team-based access control for B2B products.
+
+### `customer_seat.assigned`
+
+Sent when a seat is assigned to a customer by the organization. The customer receives an invitation email.
+
+**Use cases:** Send custom invitation emails, track seat allocation
+
+### `customer_seat.claimed`
+
+Sent when a customer accepts their seat invitation and claims access.
+
+**Use cases:** Grant access to your product, send onboarding emails
+
+### `customer_seat.revoked`
+
+Sent when a seat is revoked, either manually or automatically when a subscription is canceled.
+
+**Use cases:** Revoke access immediately, send offboarding notifications
+
+## Member Events
+
+Members represent individuals within a customer (team).
+
+### `member.created`
+
+Sent when a member is added to a customer, either via API or automatically when an owner is created.
+
+### `member.updated`
+
+Sent when member details change (name, role, etc.).
+
+### `member.deleted`
+
+Sent when a member is removed from a customer. Any active seats assigned to the member are automatically revoked.
+
+## Order Events
+
+### `order.created`
+
+Sent when a new order is created.
+
+**Triggered by:**
+- One-time product purchase (`billing_reason: "purchase"`)
+- New subscription (`billing_reason: "subscription_create"`)
+- Subscription renewal (`billing_reason: "subscription_cycle"`)
+- Subscription upgrade/downgrade with immediate invoice (`billing_reason: "subscription_update"`)
+
+<Warning>
+  The order may not be paid yet - check the `status` field. It will be `"pending"` until payment succeeds.
+</Warning>
+
+### `order.updated`
+
+Sent when an order is updated.
+
+**Triggered by:**
+- Status change (e.g., `pending` → `paid`)
+- Refunds (partial or full)
+
+### `order.paid`
+
+Sent when an order is fully paid. **This is the most reliable event for fulfillment.**
+
+**Use cases:** Grant access, send receipt, trigger fulfillment, provision services
+
+```python
+# Example: Grant access when order is paid
+@app.post("/webhooks")
+async def webhook(request: Request):
+    payload = await request.json()
+    
+    if payload["type"] == "order.paid":
+        order = payload["data"]
+        customer_email = order["customer"]["email"]
+        product_id = order["product"]["id"]
+        
+        # Grant access to the customer
+        await grant_access(customer_email, product_id)
+    
+    return {"ok": True}
+```
+
+### `order.refunded`
+
+Sent when an order is refunded (partially or fully).
+
+**Use cases:** Revoke access, update accounting, send refund confirmation
+
+## Subscription Events
+
+### `subscription.created`
+
+Sent when a new subscription is created.
+
+<Note>
+  The subscription `status` may not be `"active"` yet if payment is still processing. Use `subscription.active` for reliable activation notifications.
+</Note>
+
+### `subscription.updated`
+
+Sent for **all** subscription changes, including renewals, cancellations, and status changes.
+
+<Tip>
+  For more specific events, use `subscription.active`, `subscription.canceled`, `subscription.past_due`, or `subscription.revoked`.
+</Tip>
+
+### `subscription.active`
+
+Sent when a subscription becomes active.
+
+**Triggered by:**
+- First successful payment
+- Payment recovery after `past_due` status
+
+**Use cases:** Grant access, send welcome email, provision services
+
+### `subscription.canceled`
+
+Sent when a customer cancels their subscription.
+
+<Note>
+  The customer may still have access until `ends_at`. Use `subscription.revoked` to detect when access is actually removed.
+</Note>
+
+### `subscription.uncanceled`
+
+Sent when a customer revokes a pending cancellation.
+
+**Scenario:** When a customer cancels with "at period end", they can change their mind during the remaining period. This event fires when they undo the cancellation.
+
+### `subscription.past_due`
+
+Sent when a subscription payment fails and enters `past_due` status.
+
+**This is recoverable** - the customer can update their payment method. Benefits may be revoked depending on the organization's grace period settings.
+
+**Use cases:** Send payment failure emails, show payment update prompts
+
+### `subscription.revoked`
+
+Sent when a subscription is revoked and the customer loses access immediately.
+
+**Triggered by:**
+- Canceled subscription reaching `ends_at`
+- Payment retries exhausted (status becomes `unpaid`)
+
+**Use cases:** Revoke access immediately, downgrade features, send offboarding emails
+
+## Refund Events
+
+### `refund.created`
+
+Sent when a refund is created, regardless of status.
+
+### `refund.updated`
+
+Sent when a refund status changes (e.g., `pending` → `succeeded`).
+
+## Product Events
+
+### `product.created`
+
+Sent when a new product is created.
+
+### `product.updated`
+
+Sent when product details change (name, description, pricing, etc.).
+
+**Use cases:** Sync product catalog, update marketing materials
+
+## Benefit Events
+
+### `benefit.created`
+
+Sent when a new benefit is created.
+
+### `benefit.updated`
+
+Sent when benefit configuration changes.
+
+## Benefit Grant Events
+
+Benefit grants represent a customer's access to a specific benefit.
+
+### `benefit_grant.created`
+
+Sent when a benefit is granted to a customer.
+
+**Use cases:** Provision access, send activation emails, create accounts
+
+### `benefit_grant.updated`
+
+Sent when a benefit grant is updated (e.g., properties changed).
+
+### `benefit_grant.cycled`
+
+Sent when a benefit grant is cycled because the related subscription renewed.
+
+**Use case:** Reset usage limits, generate new license keys
+
+### `benefit_grant.revoked`
+
+Sent when a benefit grant is revoked.
+
+**Triggered by:**
+- Subscription cancellation
+- Manual revocation
+- Subscription entering grace period (depending on settings)
+
+**Use cases:** Revoke access immediately, disable features, send notifications
+
+## Organization Events
+
+### `organization.updated`
+
+Sent when organization details change (name, profile, settings, etc.).
+
+## Event Selection Strategy
+
+### For Fulfillment
+
+✅ **Use:** `order.paid` and `benefit_grant.created`
+
+### For Access Control
+
+✅ **Use:** `subscription.active`, `subscription.revoked`, `benefit_grant.created`, `benefit_grant.revoked`
+
+### For Analytics
+
+✅ **Use:** `checkout.created`, `checkout.expired`, `order.created`, `subscription.created`
+
+### For Customer Sync
+
+✅ **Use:** `customer.state_changed` (most comprehensive)
+
+## Testing Events
+
+You can trigger test events from the Polar dashboard:
+
+1. Go to Settings → Webhooks
+2. Click on an endpoint
+3. Click "Send Test Event"
+4. Select the event type
+5. Click "Send"
+
+For local testing, see [Testing Webhooks Locally](/integrate/webhooks/locally).
